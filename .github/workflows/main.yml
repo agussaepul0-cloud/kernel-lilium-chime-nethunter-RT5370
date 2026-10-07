@@ -39,11 +39,10 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Hapus -Werror hanya di Makefile/Kbuild
-          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} + || true
-          find . -name "Kbuild*" -exec sed -i 's/-Werror//g' {} + || true
+          # Hapus -Werror HANYA pada top-level Makefile utama tanpa menyentuh file header/UAPI
+          sed -i 's/-Werror//g' Makefile || true
 
-          # Cari file defconfig yang valid secara otomatis dalam folder arch/arm64/configs
+          # Deteksi defconfig yang valid
           DEFCONFIG=""
           if [ -f "arch/arm64/configs/vendor/lime-perf_defconfig" ]; then
             DEFCONFIG="vendor/lime-perf_defconfig"
@@ -63,7 +62,7 @@ jobs:
             grep -q "^$1=" out/.config || echo "$1=y" >> out/.config
           }
 
-          # 1. Wireless & Packet Injection
+          # 1. Framework Wireless & Packet Injection
           enable_config CONFIG_NETDEVICES
           enable_config CONFIG_WLAN
           enable_config CONFIG_CFG80211
@@ -72,7 +71,7 @@ jobs:
           enable_config CONFIG_NL80211_TESTMODE
           enable_config CONFIG_MAC80211_MESH
 
-          # 2. Driver RT5370 (rt2800usb)
+          # 2. Driver Ralink RT5370 (rt2800usb)
           enable_config CONFIG_NET_RADIO
           enable_config CONFIG_WLAN_VENDOR_RALINK
           enable_config CONFIG_RT2X00
@@ -84,7 +83,7 @@ jobs:
           enable_config CONFIG_RT2X00_LIB
           enable_config CONFIG_RT2X00_LIB_FIRMWARE
 
-          # 3. DT2W
+          # 3. Fitur Double Tap to Wake (DT2W)
           enable_config CONFIG_TOUCHSCREEN_COMMON
           enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
           enable_config CONFIG_TOUCHSCREEN_DT2W
@@ -113,11 +112,11 @@ jobs:
       - name: Check Build Output
         run: |
           if [ ! -f $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            echo "ERROR: File Image.gz-dtb tidak ditemukan!"
+            echo "ERROR: File Image.gz-dtb tidak ditemukan! Kompilasi gagal."
             exit 1
           fi
 
-      - name: Package Kernel via AnyKernel3
+      - name: Package Kernel via AnyKernel3 (Inject Firmware & Auto DT2W)
         run: |
           cd $GITHUB_WORKSPACE
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
