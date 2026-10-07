@@ -13,7 +13,7 @@ jobs:
       - name: Set Up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
           sudo ln -sf /usr/bin/python3 /usr/bin/python2 || true
 
       - name: Clone Kernel Source Code
@@ -39,8 +39,9 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Hapus atribut -Werror secara otomatis di seluruh Makefile agar warning tidak memicu Error
-          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} + || true
+          # Hapus -Werror HANYA di file Makefile (tanpa merusak file header/source C)
+          find . -maxdepth 4 -name "Makefile" -exec sed -i 's/-Werror//g' {} + || true
+          find . -maxdepth 4 -name "Kbuild" -exec sed -i 's/-Werror//g' {} + || true
 
           DEFCONFIG=""
           for cfg in vendor/chime-perf_defconfig vendor/lime-perf_defconfig chime-perf_defconfig lime-perf_defconfig vendor/bengal-perf_defconfig; do
@@ -94,6 +95,8 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/kernel
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # Eksekusi kompilasi dengan penanganan warning aman
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -106,8 +109,8 @@ jobs:
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip \
-            KCFLAGS="-Wno-error -Wno-unknown-warning-option -Wno-maybe-uninitialized" \
-            KAFLAGS="-Wno-error" \
+            KCFLAGS="-w" \
+            KAFLAGS="-w" \
             Image.gz-dtb
 
       - name: Check Build Output
