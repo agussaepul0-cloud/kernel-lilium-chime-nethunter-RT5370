@@ -16,9 +16,10 @@ jobs:
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget
           sudo ln -sf /usr/bin/python3 /usr/bin/python2 || true
 
-      - name: Clone Kernel Source Code
+      - name: Clone Lilium Kernel Source Code
         run: |
-          git clone --depth=1 https://github.com/PixelExperience-Devices/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
+          # Menggunakan source code resmi Lilium Kernel khusus Chime/Lime (Titik)
+          git clone --depth=1 https://github.com/Lilium-Project/android_kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
 
       - name: Download Clang & AOSP GCC Toolchains
         run: |
@@ -39,22 +40,24 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Hapus -Werror HANYA pada top-level Makefile utama tanpa menyentuh file header/UAPI
+          # Hapus -Werror pada Makefile utama Lilium
           sed -i 's/-Werror//g' Makefile || true
 
-          # Deteksi defconfig yang valid
+          # Deteksi file defconfig pada Lilium Kernel
           DEFCONFIG=""
           if [ -f "arch/arm64/configs/vendor/lime-perf_defconfig" ]; then
             DEFCONFIG="vendor/lime-perf_defconfig"
           elif [ -f "arch/arm64/configs/vendor/chime-perf_defconfig" ]; then
             DEFCONFIG="vendor/chime-perf_defconfig"
-          elif [ -f "arch/arm64/configs/vendor/bengal-perf_defconfig" ]; then
-            DEFCONFIG="vendor/bengal-perf_defconfig"
+          elif [ -f "arch/arm64/configs/chime_defconfig" ]; then
+            DEFCONFIG="chime_defconfig"
+          elif [ -f "arch/arm64/configs/lime_defconfig" ]; then
+            DEFCONFIG="lime_defconfig"
           else
             DEFCONFIG=$(find arch/arm64/configs -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          echo "Menggunakan defconfig: $DEFCONFIG"
+          echo "Menggunakan defconfig Lilium: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- $DEFCONFIG
 
           enable_config() {
@@ -90,7 +93,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- olddefconfig
 
-      - name: Compile Kernel Image
+      - name: Compile Lilium Kernel Image
         run: |
           cd $GITHUB_WORKSPACE/kernel
           export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH"
@@ -112,7 +115,7 @@ jobs:
       - name: Check Build Output
         run: |
           if [ ! -f $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            echo "ERROR: File Image.gz-dtb tidak ditemukan! Kompilasi gagal."
+            echo "ERROR: File Image.gz-dtb Lilium tidak ditemukan! Kompilasi gagal."
             exit 1
           fi
 
@@ -132,10 +135,10 @@ jobs:
 
           sed -i '/# boot shell script/a insert_line init.rc "on property:sys.boot_completed=1" "exec -- /system/bin/sh -c \\"echo 1 > /sys/touchpanel/double_tap\\""' anykernel.sh
           
-          zip -r9 ../NetHunter-Kernel-Lilium-RT5370.zip ./* -x .git\* README.md
+          zip -r9 ../NetHunter-Lilium-Kernel-RT5370.zip ./* -x .git\* README.md
 
       - name: Upload Flashable Kernel Zip
         uses: actions/upload-artifact@v4
         with:
-          name: NetHunter-Kernel-Lilium-RT5370
-          path: NetHunter-Kernel-Lilium-RT5370.zip
+          name: NetHunter-Lilium-Kernel-RT5370
+          path: NetHunter-Lilium-Kernel-RT5370.zip
