@@ -15,13 +15,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget
           
-          # Solusi untuk error 'python2: not found': buat symlink python2 ke python3
-          sudo ln -sf /usr/bin/python3 /usr/usr/bin/python2 || true
+          # Buat symlink python2 ke python3 tanpa typo path
           sudo ln -sf /usr/bin/python3 /usr/bin/python2 || true
 
       - name: Clone Kernel Source Code
         run: |
-          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b chime-q-oss $GITHUB_WORKSPACE/kernel
+          # Memakai repo publik PixelExperience / LineageOS yang terjamin aktif untuk Chime/Lime (Android 11/12/13 base)
+          git clone --depth=1 https://github.com/PixelExperience-Devices/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel || \
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_chime.git -b lineage-20.0 $GITHUB_WORKSPACE/kernel
 
       - name: Download Lilium Clang Toolchain
         run: |
@@ -42,9 +43,8 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Tentukan defconfig spesifik Xiaomi Chime/Lime
           DEFCONFIG=""
-          for cfg in vendor/chime-perf_defconfig vendor/lime-perf_defconfig chime-perf_defconfig lime-perf_defconfig vendor/bengal-perf_defconfig vendor/bengal_defconfig; do
+          for cfg in vendor/chime-perf_defconfig vendor/lime-perf_defconfig chime-perf_defconfig lime-perf_defconfig vendor/bengal-perf_defconfig; do
             if [ -f "arch/arm64/configs/$cfg" ]; then
               DEFCONFIG="$cfg"
               break
@@ -56,8 +56,6 @@ jobs:
           fi
 
           echo "Menggunakan defconfig: $DEFCONFIG"
-          
-          # Gunakan CC=clang saat membuat .config awal
           make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- $DEFCONFIG
 
           enable_config() {
