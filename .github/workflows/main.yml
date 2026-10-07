@@ -15,9 +15,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 git ccache zip unzip kmod aria2 repo wget
 
-      - name: Clone Kernel Source Code (Public Repo)
+      - name: Clone Kernel Source Code (Public Official Repo)
         run: |
-          git clone --depth=1 https://github.com/DandaPro/kernel_xiaomi_chime.git -b 4.19 $GITHUB_WORKSPACE/kernel
+          # Menggunakan repo publik yang aktif tanpa perlunya otentikasi
+          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b chime-q-oss $GITHUB_WORKSPACE/kernel || \
+          git clone --depth=1 https://github.com/PixelExperience-Devices/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
 
       - name: Download Lilium Clang Toolchain
         run: |
@@ -58,7 +60,7 @@ jobs:
             grep -q "^$1=" out/.config || echo "$1=y" >> out/.config
           }
 
-          # 1. Framework Wireless & Packet Injection (Airgeddon)
+          # 1. Framework Wireless & Packet Injection
           enable_config CONFIG_NETDEVICES
           enable_config CONFIG_WLAN
           enable_config CONFIG_CFG80211
@@ -67,7 +69,7 @@ jobs:
           enable_config CONFIG_NL80211_TESTMODE
           enable_config CONFIG_MAC80211_MESH
 
-          # 2. Driver USB Wi-Fi RT5370 (rt2800usb)
+          # 2. Driver Khusus Ralink RT5370 (rt2800usb)
           enable_config CONFIG_NET_RADIO
           enable_config CONFIG_WLAN_VENDOR_RALINK
           enable_config CONFIG_RT2X00
