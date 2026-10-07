@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel - Lilium Clang RT5370 (Exact Screenshot Match)
+name: Build NetHunter Kernel - Lilium Clang RT5370 (Fixed)
 
 on:
   workflow_dispatch:
@@ -17,14 +17,15 @@ jobs:
 
       - name: Download Exact Lilium Clang Toolchain (Commit 952d333)
         run: |
-          mkdir -p $GITHUB_WORKSPACE/clang
           git clone https://github.com/liliumproject/llvm-project.git $GITHUB_WORKSPACE/clang
           cd $GITHUB_WORKSPACE/clang
-          git checkout 952d33352b48dcdd45128da79b5a02a368cd024 || true
+          git fetch origin 952d33352b48dcdd45128da79b5a02a368cd024
+          git checkout 952d33352b48dcdd45128da79b5a02a368cd024
 
       - name: Clean Kernel Source
         run: |
-          make mrproper
+          cd $GITHUB_WORKSPACE
+          make mrproper || true
           rm -rf out
 
       - name: Configure Kernel Options (RT5370, Injection, DT2W)
@@ -66,61 +67,4 @@ jobs:
           enable_config CONFIG_RT2800USB_RT53XX
           enable_config CONFIG_RT2800USB_UNKNOWN
           enable_config CONFIG_RT2X00_LIB_USB
-          enable_config CONFIG_RT2X00_LIB
-          enable_config CONFIG_RT2X00_LIB_FIRMWARE
-
-          # 3. Fitur Double Tap to Wake (DT2W Kernel Support)
-          enable_config CONFIG_TOUCHSCREEN_COMMON
-          enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
-          enable_config CONFIG_TOUCHSCREEN_DT2W
-
-          # Selesaikan dependensi konfigurasi
-          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
-
-      - name: Compile Kernel Image
-        run: |
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
-          make -j$(nproc --all) O=out \
-            ARCH=arm64 \
-            CC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
-            Image.gz-dtb
-
-      - name: Check Build Output
-        run: |
-          if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
-            echo "ERROR: File Image.gz-dtb tidak ditemukan! Kompilasi gagal."
-            exit 1
-          fi
-
-      - name: Package Kernel via AnyKernel3 (Inject Firmware & Auto DT2W)
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cd AnyKernel3
-          
-          # 1. Konfigurasi nama perangkat target
-          sed -i 's/device.name1=.*/device.name1=lime/' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=chime/' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
-
-          # 2. Unduh dan Masukkan Firmware RT5370 (rt2870.bin) ke Vendor System Firmware
-          mkdir -p ramdisk/overlay/system/etc/firmware
-          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O ramdisk/overlay/system/etc/firmware/rt2870.bin
-
-          # 3. Injeksikan Perintah DT2W saat booting selesai
-          sed -i '/# boot shell script/a insert_line init.rc "on property:sys.boot_completed=1" "exec -- /system/bin/sh -c \\"echo 1 > /sys/touchpanel/double_tap\\""' anykernel.sh
-          
-          zip -r9 ../NetHunter-Kernel-Lilium-RT5370.zip ./* -x .git\* README.md
-
-      - name: Upload Flashable Kernel Zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: NetHunter-Kernel-Lilium-RT5370
-          path: NetHunter-Kernel-Lilium-RT5370.zip
+          enable_config CONFIG_RT2
