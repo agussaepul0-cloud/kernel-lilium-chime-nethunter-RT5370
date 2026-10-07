@@ -18,7 +18,7 @@ jobs:
 
       - name: Clone Lilium Kernel Source Code
         run: |
-          # Menggunakan URL resmi yang kamu berikan
+          # Menggunakan URL resmi Lilium Project untuk Xiaomi Chime
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
 
       - name: Download Clang & AOSP GCC Toolchains
