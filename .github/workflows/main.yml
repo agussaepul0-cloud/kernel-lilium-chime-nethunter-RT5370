@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel - Lilium Clang RT5370 (Fixed)
+name: Build NetHunter Kernel - Lilium Clang RT5370 (Fixed Fetch)
 
 on:
   workflow_dispatch:
@@ -15,12 +15,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 git ccache zip unzip kmod aria2 repo wget
 
-      - name: Download Exact Lilium Clang Toolchain (Commit 952d333)
+      - name: Download Lilium Clang Toolchain
         run: |
-          git clone https://github.com/liliumproject/llvm-project.git $GITHUB_WORKSPACE/clang
-          cd $GITHUB_WORKSPACE/clang
-          git fetch origin 952d33352b48dcdd45128da79b5a02a368cd024
-          git checkout 952d33352b48dcdd45128da79b5a02a368cd024
+          git clone --depth=1 https://github.com/liliumproject/llvm-project.git $GITHUB_WORKSPACE/clang || \
+          git clone --depth=1 https://gitlab.com/LiliumProject/lilium-clang.git $GITHUB_WORKSPACE/clang || \
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git $GITHUB_WORKSPACE/clang
 
       - name: Clean Kernel Source
         run: |
@@ -49,7 +48,7 @@ jobs:
             grep -q "^$1=" out/.config || echo "$1=y" >> out/.config
           }
 
-          # 1. Framework Wireless & Packet Injection (Airgeddon/NetHunter)
+          # 1. Framework Wireless & Packet Injection
           enable_config CONFIG_NETDEVICES
           enable_config CONFIG_WLAN
           enable_config CONFIG_CFG80211
@@ -67,4 +66,61 @@ jobs:
           enable_config CONFIG_RT2800USB_RT53XX
           enable_config CONFIG_RT2800USB_UNKNOWN
           enable_config CONFIG_RT2X00_LIB_USB
-          enable_config CONFIG_RT2
+          enable_config CONFIG_RT2X00_LIB
+          enable_config CONFIG_RT2X00_LIB_FIRMWARE
+
+          # 3. Fitur Double Tap to Wake (DT2W)
+          enable_config CONFIG_TOUCHSCREEN_COMMON
+          enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
+          enable_config CONFIG_TOUCHSCREEN_DT2W
+
+          # Selesaikan dependensi konfigurasi
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
+
+      - name: Compile Kernel Image
+        run: |
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          make -j$(nproc --all) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            Image.gz-dtb
+
+      - name: Check Build Output
+        run: |
+          if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            echo "ERROR: File Image.gz-dtb tidak ditemukan! Kompilasi gagal."
+            exit 1
+          fi
+
+      - name: Package Kernel via AnyKernel3 (Inject Firmware & Auto DT2W)
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cd AnyKernel3
+          
+          # 1. Konfigurasi nama perangkat target
+          sed -i 's/device.name1=.*/device.name1=lime/' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=chime/' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
+
+          # 2. Unduh dan Masukkan Firmware RT5370 (rt2870.bin)
+          mkdir -p ramdisk/overlay/system/etc/firmware
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O ramdisk/overlay/system/etc/firmware/rt2870.bin
+
+          # 3. Injeksikan Perintah DT2W saat booting selesai
+          sed -i '/# boot shell script/a insert_line init.rc "on property:sys.boot_completed=1" "exec -- /system/bin/sh -c \\"echo 1 > /sys/touchpanel/double_tap\\""' anykernel.sh
+          
+          zip -r9 ../NetHunter-Kernel-Lilium-RT5370.zip ./* -x .git\* README.md
+
+      - name: Upload Flashable Kernel Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetHunter-Kernel-Lilium-RT5370
+          path: NetHunter-Kernel-Lilium-RT5370.zip
