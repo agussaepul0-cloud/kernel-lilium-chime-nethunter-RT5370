@@ -1,159 +1,126 @@
-name: Kernel_Lilium-Chime-Final
+name: Build NetHunter Kernel - Lilium Clang RT5370 (Exact Screenshot Match)
+
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Kernel Source
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Install Dependencies
+      - name: Set Up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 git ccache zip unzip kmod aria2 repo wget
 
-      - name: Clone Toolchain, LLVM, QCOM & Kernel Source
+      - name: Download Exact Lilium Clang Toolchain (Commit 952d333)
         run: |
-          git clone --depth=1 https://github.com/liliumproject/clang.git clang
-          git clone --depth=1 https://github.com/liliumproject/llvm-project.git llvm-src
-          
-          # Menggabungkan biner LLVM ke dalam folder bin clang agar ld.lld & llvm-objdump terbaca sempurna
-          if [ -d "llvm-src/bin" ]; then
-            cp -rf llvm-src/bin/* clang/bin/
-          fi
-          
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ursinia kernel
-          git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git kernel/kernel/qcom
+          mkdir -p $GITHUB_WORKSPACE/clang
+          git clone https://github.com/liliumproject/llvm-project.git $GITHUB_WORKSPACE/clang
+          cd $GITHUB_WORKSPACE/clang
+          git checkout 952d33352b48dcdd45128da79b5a02a368cd024 || true
 
-      - name: Configure Kernel
+      - name: Clean Kernel Source
         run: |
-          cd kernel
+          make mrproper
+          rm -rf out
 
+      - name: Configure Kernel Options (RT5370, Injection, DT2W)
+        run: |
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
-          MAKE_ARGS=(
-            CC=clang
-            LD=ld.lld
-            AR=llvm-ar
-            AS=llvm-as
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            LLVM=1
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          )
+          # Menggunakan defconfig Lilium/Chime
+          if [ -f arch/arm64/configs/vendor/chime-perf_defconfig ]; then
+            make O=out ARCH=arm64 vendor/chime-perf_defconfig
+          elif [ -f arch/arm64/configs/vendor/lime-perf_defconfig ]; then
+            make O=out ARCH=arm64 vendor/lime-perf_defconfig
+          else
+            make O=out ARCH=arm64 vendor/lime_defconfig
+          fi
 
-          # Bersihkan direktori output
-          rm -rf out
-          mkdir -p out
+          # Helper function untuk menyuntikkan konfigurasi ke .config
+          enable_config() {
+            sed -i "s/# $1 is not set/$1=y/" out/.config
+            grep -q "^$1=" out/.config || echo "$1=y" >> out/.config
+          }
 
-          # 1. Load Defconfig Bengal-Perf
-          make O=out "${MAKE_ARGS[@]}" vendor/bengal-perf_defconfig
+          # 1. Framework Wireless & Packet Injection (Airgeddon/NetHunter)
+          enable_config CONFIG_NETDEVICES
+          enable_config CONFIG_WLAN
+          enable_config CONFIG_CFG80211
+          enable_config CONFIG_MAC80211
+          enable_config CONFIG_CFG80211_INTERNAL_REGDB
+          enable_config CONFIG_NL80211_TESTMODE
+          enable_config CONFIG_MAC80211_MESH
 
-          # 2. Konfigurasi Dasar USB dan Wireless Aman
-          scripts/config --file out/.config --enable CONFIG_NET
-          scripts/config --file out/.config --enable CONFIG_WIRELESS
-          scripts/config --file out/.config --enable CONFIG_WLAN
-          scripts/config --file out/.config --enable CONFIG_CFG80211
-          scripts/config --file out/.config --enable CONFIG_MAC80211
-          scripts/config --file out/.config --enable CONFIG_USB_SUPPORT
-          scripts/config --file out/.config --enable CONFIG_USB
-          scripts/config --file out/.config --enable CONFIG_USB_OTG
+          # 2. Driver Khusus Ralink RT5370 (rt2800usb)
+          enable_config CONFIG_NET_RADIO
+          enable_config CONFIG_WLAN_VENDOR_RALINK
+          enable_config CONFIG_RT2X00
+          enable_config CONFIG_RT2800USB
+          enable_config CONFIG_RT2800USB_RT35XX
+          enable_config CONFIG_RT2800USB_RT53XX
+          enable_config CONFIG_RT2800USB_UNKNOWN
+          enable_config CONFIG_RT2X00_LIB_USB
+          enable_config CONFIG_RT2X00_LIB
+          enable_config CONFIG_RT2X00_LIB_FIRMWARE
 
-          # 3. Aktifkan DT2W secara Default di Level Kernel
-          scripts/config --file out/.config --enable CONFIG_TOUCHSCREEN_DOUBLE_TAP
+          # 3. Fitur Double Tap to Wake (DT2W Kernel Support)
+          enable_config CONFIG_TOUCHSCREEN_COMMON
+          enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
+          enable_config CONFIG_TOUCHSCREEN_DT2W
 
-          # 4. Regenerasi Kconfig Dependensi
-          make O=out "${MAKE_ARGS[@]}" olddefconfig
+          # Selesaikan dependensi konfigurasi
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
 
-          # 5. Kompilasi Kernel Image & DTB
-          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs
-
-      - name: Repack Installer AnyKernel3
+      - name: Compile Kernel Image
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          make -j$(nproc --all) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            Image.gz-dtb
 
-          # Salin Image Kernel
-          if [ -f kernel/out/arch/arm64/boot/Image ]; then
-            cp kernel/out/arch/arm64/boot/Image AnyKernel3/Image
-          else
-            echo "Error: Image file not found!" && exit 1
+      - name: Check Build Output
+        run: |
+          if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            echo "ERROR: File Image.gz-dtb tidak ditemukan! Kompilasi gagal."
+            exit 1
           fi
 
-          # Salin file DTB
-          if [ -f kernel/out/arch/arm64/boot/dtb.img ]; then
-            cp kernel/out/arch/arm64/boot/dtb.img AnyKernel3/dtb
-          elif [ -f kernel/out/arch/arm64/boot/dtb ]; then
-            cp kernel/out/arch/arm64/boot/dtb AnyKernel3/dtb
-          elif [ -f kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb ]; then
-            cp kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb AnyKernel3/dtb
-          elif [ -f kernel/out/arch/arm64/boot/dts/qcom/bengal.dtb ]; then
-            cp kernel/out/arch/arm64/boot/dts/qcom/bengal.dtb AnyKernel3/dtb
-          fi
-
-          [ -f kernel/out/arch/arm64/boot/dtbo.img ] && cp kernel/out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
-
+      - name: Package Kernel via AnyKernel3 (Inject Firmware & Auto DT2W)
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           cd AnyKernel3
+          
+          # 1. Konfigurasi nama perangkat target
+          sed -i 's/device.name1=.*/device.name1=lime/' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=chime/' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
 
-          cat << 'EOF' > anykernel.sh
-          ### AnyKernel3 Ramdisk Mod Script
-          ## osm0sis @ xda-developers
+          # 2. Unduh dan Masukkan Firmware RT5370 (rt2870.bin) ke Vendor System Firmware
+          mkdir -p ramdisk/overlay/system/etc/firmware
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O ramdisk/overlay/system/etc/firmware/rt2870.bin
 
-          ### AnyKernel setup
-          # begin properties
-          properties() { '
-          kernel.string=Lilium-Chime-Final
-          do.devicecheck=0
-          do.modules=0
-          do.systemless=1
-          do.cleanup=1
-          do.cleanuponabort=0
-          supported.versions=
-          supported.patchlevels=
-          '; } # end properties
+          # 3. Injeksikan Perintah DT2W saat booting selesai
+          sed -i '/# boot shell script/a insert_line init.rc "on property:sys.boot_completed=1" "exec -- /system/bin/sh -c \\"echo 1 > /sys/touchpanel/double_tap\\""' anykernel.sh
+          
+          zip -r9 ../NetHunter-Kernel-Lilium-RT5370.zip ./* -x .git\* README.md
 
-          ## Boot Shell Variables
-          if [ -b /dev/block/by-name/boot ]; then
-            block=/dev/block/by-name/boot;
-          elif [ -b /dev/block/bootdevice/by-name/boot ]; then
-            block=/dev/block/bootdevice/by-name/boot;
-          else
-            block=auto;
-          fi
-
-          is_slot_device=0;
-          ramdisk_compression=auto;
-          patch_vbmeta_flag=auto;
-
-          . tools/ak3-core.sh && attributes;
-
-          dump_boot;
-
-          # Service Double Tap To Wake (DT2W) Auto Enable
-          if [ -d /data/adb/service.d ]; then
-            echo '#!/system/bin/sh' > /data/adb/service.d/dt2w.sh
-            echo 'sleep 5' >> /data/adb/service.d/dt2w.sh
-            echo 'echo 1 > /sys/touchpanel/double_tap' >> /data/adb/service.d/dt2w.sh
-            chmod 755 /data/adb/service.d/dt2w.sh
-          fi
-
-          write_boot;
-          EOF
-
-          chmod -R 755 tools/
-          zip -r9 Kernel_Lilium-Chime-Final.zip * -x .git README.md
-
-      - name: Upload Kernel Artifact
+      - name: Upload Flashable Kernel Zip
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Lilium-Chime-Final
-          path: AnyKernel3/Kernel_Lilium-Chime-Final.zip
+          name: NetHunter-Kernel-Lilium-RT5370
+          path: NetHunter-Kernel-Lilium-RT5370.zip
