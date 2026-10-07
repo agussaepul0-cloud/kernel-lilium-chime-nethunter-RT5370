@@ -18,8 +18,8 @@ jobs:
 
       - name: Clone Lilium Kernel Source Code
         run: |
-          # Menggunakan URL resmi Lilium Project untuk Xiaomi Chime
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
+          # Menggunakan URL resmi Lilium Project tanpa pembatasan branch agar otomatis mendeteksi default branch
+          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git $GITHUB_WORKSPACE/kernel
 
       - name: Download Clang & AOSP GCC Toolchains
         run: |
@@ -40,24 +40,24 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Hapus -Werror pada Makefile utama Lilium
+          # Hapus -Werror pada Makefile utama Lilium jika ada
           sed -i 's/-Werror//g' Makefile || true
 
-          # Deteksi file defconfig pada Lilium Kernel
+          # Deteksi file defconfig secara fleksibel di dalam kernel Lilium
           DEFCONFIG=""
           if [ -f "arch/arm64/configs/vendor/lime-perf_defconfig" ]; then
             DEFCONFIG="vendor/lime-perf_defconfig"
           elif [ -f "arch/arm64/configs/vendor/chime-perf_defconfig" ]; then
             DEFCONFIG="vendor/chime-perf_defconfig"
-          elif [ -f "arch/arm64/configs/chime_defconfig" ]; then
-            DEFCONFIG="chime_defconfig"
           elif [ -f "arch/arm64/configs/lime_defconfig" ]; then
             DEFCONFIG="lime_defconfig"
+          elif [ -f "arch/arm64/configs/chime_defconfig" ]; then
+            DEFCONFIG="chime_defconfig"
           else
             DEFCONFIG=$(find arch/arm64/configs -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          echo "Menggunakan defconfig Lilium: $DEFCONFIG"
+          echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- $DEFCONFIG
 
           enable_config() {
