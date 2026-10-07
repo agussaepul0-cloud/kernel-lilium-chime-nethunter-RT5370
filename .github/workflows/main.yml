@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel - Lilium Clang RT5370 (Fixed Fetch)
+name: Build NetHunter Kernel - Lilium Clang RT5370 (Fixed Defconfig)
 
 on:
   workflow_dispatch:
@@ -33,14 +33,22 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Menggunakan defconfig Lilium/Chime
-          if [ -f arch/arm64/configs/vendor/chime-perf_defconfig ]; then
-            make O=out ARCH=arm64 vendor/chime-perf_defconfig
-          elif [ -f arch/arm64/configs/vendor/lime-perf_defconfig ]; then
-            make O=out ARCH=arm64 vendor/lime-perf_defconfig
-          else
-            make O=out ARCH=arm64 vendor/lime_defconfig
+          # Otomatis mendeteksi defconfig perangkat (lime / chime / citrus)
+          DEFCONFIG=""
+          for cfg in chime-perf_defconfig lime-perf_defconfig chime_defconfig lime_defconfig vendor/chime-perf_defconfig vendor/lime-perf_defconfig vendor/chime_defconfig vendor/lime_defconfig; do
+            if [ -f "arch/arm64/configs/$cfg" ]; then
+              DEFCONFIG="$cfg"
+              break
+            fi
+          done
+
+          # Jika tidak ditemukan nama spesifik, ambil defconfig pertama yang ada di folder configs
+          if [ -z "$DEFCONFIG" ]; then
+            DEFCONFIG=$(find arch/arm64/configs -maxdepth 2 -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
+
+          echo "Menggunakan defconfig: $DEFCONFIG"
+          make O=out ARCH=arm64 $DEFCONFIG
 
           # Helper function untuk menyuntikkan konfigurasi ke .config
           enable_config() {
