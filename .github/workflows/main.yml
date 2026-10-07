@@ -13,18 +13,21 @@ jobs:
       - name: Set Up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget
           sudo ln -sf /usr/bin/python3 /usr/bin/python2 || true
 
       - name: Clone Kernel Source Code
         run: |
           git clone --depth=1 https://github.com/PixelExperience-Devices/kernel_xiaomi_chime.git -b thirteen $GITHUB_WORKSPACE/kernel
 
-      - name: Download Lilium Clang Toolchain
+      - name: Download Clang & AOSP GCC Toolchains
         run: |
-          git clone --depth=1 https://github.com/liliumproject/llvm-project.git $GITHUB_WORKSPACE/clang || \
-          git clone --depth=1 https://gitlab.com/LiliumProject/lilium-clang.git $GITHUB_WORKSPACE/clang || \
+          # 1. Download Proton Clang Toolchain
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git $GITHUB_WORKSPACE/clang
+
+          # 2. Download AOSP GCC 64-bit & 32-bit Cross-Compilers (Kunci utama agar bounds.s & asm-offsets berhasil)
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git $GITHUB_WORKSPACE/gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git $GITHUB_WORKSPACE/gcc32
 
       - name: Clean Kernel Source
         run: |
@@ -35,13 +38,15 @@ jobs:
       - name: Configure Kernel Options (RT5370, Injection, DT2W)
         run: |
           cd $GITHUB_WORKSPACE/kernel
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # Set Path ke Toolchains
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Hapus -Werror HANYA di file Makefile (tanpa merusak file header/source C)
-          find . -maxdepth 4 -name "Makefile" -exec sed -i 's/-Werror//g' {} + || true
-          find . -maxdepth 4 -name "Kbuild" -exec sed -i 's/-Werror//g' {} + || true
+          # Hapus flag -Werror secara aman di seluruh file build
+          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} + || true
+          find . -name "Kbuild*" -exec sed -i 's/-Werror//g' {} + || true
 
           DEFCONFIG=""
           for cfg in vendor/chime-perf_defconfig vendor/lime-perf_defconfig chime-perf_defconfig lime-perf_defconfig vendor/bengal-perf_defconfig; do
@@ -56,7 +61,7 @@ jobs:
           fi
 
           echo "Menggunakan defconfig: $DEFCONFIG"
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- $DEFCONFIG
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- $DEFCONFIG
 
           enable_config() {
             sed -i "s/# $1 is not set/$1=y/" out/.config
@@ -89,28 +94,25 @@ jobs:
           enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
           enable_config CONFIG_TOUCHSCREEN_DT2W
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- olddefconfig
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- olddefconfig
 
       - name: Compile Kernel Image
         run: |
           cd $GITHUB_WORKSPACE/kernel
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH"
           
-          # Eksekusi kompilasi dengan penanganan warning aman
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
             HOSTCC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
             AR=llvm-ar \
             NM=llvm-nm \
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip \
-            KCFLAGS="-w" \
-            KAFLAGS="-w" \
             Image.gz-dtb
 
       - name: Check Build Output
