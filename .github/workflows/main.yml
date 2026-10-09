@@ -132,26 +132,20 @@ jobs:
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # Patch AnyKernel3
+          # Patch AnyKernel3 tanpa berpindah direktori terlebih dahulu
           sed -i 's/device.name1=.*/device.name1=chime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' AnyKernel3/anykernel.sh
           
-          cat << 'EOF' >> AnyKernel3/boot-patch.sh
-          if [ -d /sys/touchpanel ]; then
-            echo 1 > /sys/touchpanel/double_tap
-          fi
-          EOF
+          echo 'if [ -d /sys/touchpanel ]; then echo 1 > /sys/touchpanel/double_tap; fi' >> AnyKernel3/boot-patch.sh
           
-          # Buat zip di root directory
+          # Masuk direktori AnyKernel3 hanya untuk membuat zip
           cd AnyKernel3
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Kernel Zip ke Artifacts (Dengan Retry / Retention)
+      # 7. Upload Kernel Zip ke Artifacts
       - name: Upload Kernel Zip to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Lilium-NetHunter-Chime-Kernel
           path: Lilium-NetHunter-Chime-Kernel.zip
-          retention-days: 7
-          if-no-files-found: error
