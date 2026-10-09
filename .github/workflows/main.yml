@@ -17,7 +17,7 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Set Up Environment & Dependencies (Termasuk dtc)
+      # 2. Set Up Environment & Dependencies
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
@@ -29,14 +29,14 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel Options & Patch -Werror Total
+      # 4. Configure Kernel Options & Patch -Werror
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Bersihkan semua instruksi -Werror di seluruh Makefile (termasuk techpack/audio)
+          # Bersihkan semua instruksi -Werror di seluruh Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Otomatis deteksi & muat defconfig vendor/chime
@@ -59,7 +59,7 @@ jobs:
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 (Ralink) & Dependencies Lengkap
+          # Enable Driver RT5370 (Ralink) & Dependencies
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -147,9 +147,11 @@ jobs:
           cd AnyKernel3
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Kernel Zip ke Artifacts
+      # 7. Upload Kernel Zip ke Artifacts (Dengan Retry / Retention)
       - name: Upload Kernel Zip to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Lilium-NetHunter-Chime-Kernel
           path: Lilium-NetHunter-Chime-Kernel.zip
+          retention-days: 7
+          if-no-files-found: error
