@@ -36,10 +36,9 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Bersihkan semua instruksi -Werror di Makefile
+          # Bersihkan instruksi -Werror di Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
-          # Deteksi defconfig
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
@@ -105,13 +104,12 @@ jobs:
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      # 6. Pack AnyKernel3 Terbaru & Kompatibel (Xiaomi Chime/Lime/Citrus)
+      # 6. Pack AnyKernel3
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           
-          # Salin file Image Kernel hasil kompilasi
           if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
             cp kernel-src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
           elif [ -f kernel-src/out/arch/arm64/boot/Image.gz ]; then
@@ -123,30 +121,34 @@ jobs:
             exit 1
           fi
 
-          # Salin Modul .ko
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
 
-          # Download Firmware RT5370 PnP
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # Kustomisasi anykernel.sh untuk Chime/Lime
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel for Chime\/Lime/' anykernel.sh
+          sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel Chime\/Lime/' anykernel.sh
           sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
-          sed -i 's/device.name4=.*/device.name4=lemon/' anykernel.sh
-          sed -i 's/device.name5=.*/device.name5=pomelo/' anykernel.sh
-          sed -i 's/is_slot_device=.*/is_slot_device=0/' anykernel.sh
 
-          # Buat zip di direktori root
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Kernel Zip ke Artifacts
+      # 7. Upload Kernel Zip ke Artifacts & GitHub Releases (Biar 100% Aman)
       - name: Upload Kernel Zip to Artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: Lilium-NetHunter-Chime-Kernel
           path: Lilium-NetHunter-Chime-Kernel.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Lilium NetHunter Kernel Build #${{ github.run_number }}
+          files: Lilium-NetHunter-Chime-Kernel.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
