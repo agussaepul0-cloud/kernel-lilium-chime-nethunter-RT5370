@@ -17,18 +17,19 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
           
+      # 2. Set Up Environment (Ditambahkan device-tree-compiler & dtc)
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
 
-      # 2. Download Lilium Clang 19 Toolchain
+      # 3. Download Lilium Clang 19 Toolchain
       - name: Download Lilium Clang 19 Toolchain
         run: |
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 3. Configure Kernel Options (RT5370 PnP & DT2W Default)
+      # 4. Configure Kernel Options
       - name: Configure Kernel Options
         run: |
           cd kernel-src
@@ -45,12 +46,14 @@ jobs:
           elif [ -f arch/arm64/configs/chime_defconfig ]; then
             DEFCONFIG="chime_defconfig"
           else
-            # Mencari file defconfig pertama yang ada di folder configs
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
+
+          # Matikan WERROR agar warning Clang 19 tidak dianggap error fatal
+          ./scripts/config --file out/.config -d CONFIG_WERROR
 
           # Enable Driver RT5370 (Ralink) & Injection
           ./scripts/config --file out/.config \
@@ -79,7 +82,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 4. Compile Lilium Kernel Image
+      # 5. Compile Lilium Kernel Image
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -91,11 +94,12 @@ jobs:
             HOSTCC=gcc \
             HOSTCXX=g++ \
             HOSTLD=ld \
+            KCFLAGS="-Wno-error" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      # 5. Pack AnyKernel3 + Firmware RT5370 + DT2W Auto Run
+      # 6. Pack AnyKernel3 + Firmware RT5370 + DT2W Auto Run
       - name: Package with AnyKernel3
         run: |
           if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
