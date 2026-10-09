@@ -9,7 +9,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set Up Environment & Dependencies
         run: |
@@ -98,7 +98,6 @@ jobs:
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
           
-          # Menulis skrip init khusus di AnyKernel3 agar dijalankan tiap HP booting
           cat << 'EOF' >> boot-patch.sh
           if [ -d /sys/touchpanel ]; then
             echo 1 > /sys/touchpanel/double_tap
@@ -108,7 +107,7 @@ jobs:
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
       - name: Upload Kernel Zip to Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Lilium-NetHunter-Chime-Kernel
           path: Lilium-NetHunter-Chime-Kernel.zip
