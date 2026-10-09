@@ -17,7 +17,7 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
           
-      # 2. Set Up Environment & Dependencies (Termasuk dtc)
+      # 2. Set Up Environment & Dependencies
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
@@ -39,7 +39,7 @@ jobs:
           # Hapus paksa semua instruksi -Werror di seluruh Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
-          # Otomatis cari & muat defconfig chime/bengal dari repo Lilium
+          # Otomatis cari & muat defconfig chime/bengal
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
@@ -55,11 +55,11 @@ jobs:
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
-          # Matikan WERROR dan Matikan Terpisah DTBO Overlay Build agar tidak error di dts
+          # Matikan WERROR dan Matikan DTBO Build terpisah
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 (Ralink) & Dependency Lengkap
+          # Enable Driver RT5370 (Ralink) & Dependencies
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -108,6 +108,9 @@ jobs:
       # 6. Pack AnyKernel3 + Firmware RT5370 + DT2W Auto Run
       - name: Package with AnyKernel3
         run: |
+          rm -rf AnyKernel3
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          
           if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
             KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz-dtb"
           elif [ -f kernel-src/out/arch/arm64/boot/Image.gz ]; then
@@ -119,7 +122,6 @@ jobs:
             exit 1
           fi
 
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp $KERNEL_IMG AnyKernel3/
           
           # Salin Modul .ko Kernel
