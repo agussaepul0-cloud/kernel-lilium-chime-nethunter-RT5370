@@ -8,28 +8,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step ini otomatis mendownload SOURCE CODE LILIUM dari repositori kamu
-      - name: Checkout Source Code Kernel Lilium
+      - name: Checkout Workflow Repository
         uses: actions/checkout@v4
 
+      # 1. Clone Source Code Kernel Xiaomi Chime (Bengal/Lilium)
+      - name: Clone Kernel Source Code
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_chime.git -b lineage-18.1 kernel-src || \
+          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b chime-r-oss kernel-src
+          
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache
 
-      # Mengunduh Toolchain Lilium Clang 19 sesuai screenshot di HP kamu
+      # 2. Download Lilium Clang 19 Toolchain
       - name: Download Lilium Clang 19 Toolchain
         run: |
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      - name: Configure Kernel Options (RT5370 PnP & DT2W Default)
+      # 3. Configure Kernel Options (RT5370 PnP & DT2W Default)
+      - name: Configure Kernel Options
         run: |
-          export PATH="$(pwd)/clang/bin:$PATH"
+          cd kernel-src
+          export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Memuat defconfig bawaan dari Source Code Lilium
-          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld bengal-perf_defconfig
+          # Otomatis cari & muat defconfig chime/bengal yang ada di source code
+          if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
+            DEFCONFIG="vendor/bengal-perf_defconfig"
+          elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
+            DEFCONFIG="bengal-perf_defconfig"
+          elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
+            DEFCONFIG="vendor/chime_defconfig"
+          else
+            DEFCONFIG="chime_defconfig"
+          fi
+
+          echo "Menggunakan defconfig: $DEFCONFIG"
+          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
           # Enable Driver RT5370 (Ralink) & Injection
           ./scripts/config --file out/.config \
@@ -58,9 +76,11 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
+      # 4. Compile Kernel
       - name: Compile Lilium Kernel Image
         run: |
-          export PATH="$(pwd)/clang/bin:$PATH"
+          cd kernel-src
+          export PATH="$(pwd)/../clang/bin:$PATH"
           
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
@@ -72,29 +92,29 @@ jobs:
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      - name: Package with AnyKernel3 (Include Firmware & Auto-DT2W Boot Script)
+      # 5. Pack AnyKernel3 + Firmware RT5370 + DT2W Auto Run
+      - name: Package with AnyKernel3
         run: |
-          if [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
-            KERNEL_IMG="out/arch/arm64/boot/Image.gz-dtb"
-          elif [ -f out/arch/arm64/boot/Image ]; then
-            KERNEL_IMG="out/arch/arm64/boot/Image"
+          if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
+            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz-dtb"
+          elif [ -f kernel-src/out/arch/arm64/boot/Image ]; then
+            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image"
           else
-            echo "Error: Image kernel Lilium tidak ditemukan!"
+            echo "Error: Image kernel tidak ditemukan!"
             exit 1
           fi
 
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp $KERNEL_IMG AnyKernel3/
           
-          # 1. Salin Modul .ko Kernel
+          # Salin Modul .ko
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
 
-          # 2. Download Firmware Ralink RT5370 untuk PnP Wi-Fi
+          # Firmware RT5370 PnP
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # 3. Injeksikan Skrip Auto-Enable DT2W di Ramdisk saat Booting
           cd AnyKernel3
           sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
