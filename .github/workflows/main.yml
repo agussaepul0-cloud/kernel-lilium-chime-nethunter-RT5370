@@ -36,7 +36,7 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # 1. Hapus paksa semua instruksi -Werror di seluruh Makefile (termasuk techpack/audio)
+          # Hapus paksa semua instruksi -Werror di seluruh Makefile (termasuk techpack/audio)
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Otomatis cari & muat defconfig chime/bengal dari repo Lilium
@@ -58,7 +58,7 @@ jobs:
           # Matikan WERROR di level .config
           ./scripts/config --file out/.config -d CONFIG_WERROR
 
-          # Enable Driver RT5370 (Ralink) & Injection
+          # Enable Driver RT5370 (Ralink) & Dependency Lengkap
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -68,13 +68,15 @@ jobs:
             -e CONFIG_CFG80211 \
             -e CONFIG_CFG80211_WEXT \
             -e CONFIG_RT2X00 \
-            -m CONFIG_RT2800USB \
-            -e CONFIG_RT2800USB_RT53XX \
-            -e CONFIG_RT2800USB_RT3572 \
-            -e CONFIG_RT2800USB_UNKNOWN \
+            -e CONFIG_RT2X00_LIB \
+            -e CONFIG_RT2800_LIB \
             -e CONFIG_RT2X00_LIB_USB \
             -e CONFIG_RT2X00_LIB_FIRMWARE \
-            -e CONFIG_RT2X00_LIB_CRYPTO
+            -e CONFIG_RT2X00_LIB_CRYPTO \
+            -e CONFIG_RT2800USB \
+            -e CONFIG_RT2800USB_RT53XX \
+            -e CONFIG_RT2800USB_RT3572 \
+            -e CONFIG_RT2800USB_UNKNOWN
 
           # Enable Double Tap to Wake (DT2W) Config
           ./scripts/config --file out/.config \
