@@ -17,7 +17,7 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Set Up Environment & Dependencies (Termasuk dtc)
+      # 2. Set Up Environment & Dependencies
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
@@ -29,17 +29,17 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel Options & Patch -Werror Total
+      # 4. Configure Kernel Options & Patch -Werror
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Hapus semua instruksi -Werror di seluruh Makefile (biar Clang 19 gak rewel)
+          # Hapus instruksi -Werror di Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
-          # Otomatis deteksi & muat defconfig vendor/chime
+          # Deteksi defconfig
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
@@ -55,11 +55,11 @@ jobs:
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
-          # Matikan WERROR dan Matikan DTBO Build terpisah
+          # Disable WERROR dan DTBO Build
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 (Ralink) & Dependencies Lengkap
+          # Enable Driver RT5370 & Dependencies
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -79,7 +79,7 @@ jobs:
             -e CONFIG_RT2800USB_RT3572 \
             -e CONFIG_RT2800USB_UNKNOWN
 
-          # Enable Double Tap to Wake (DT2W) Config
+          # Enable DT2W
           ./scripts/config --file out/.config \
             -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
             -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
@@ -132,18 +132,19 @@ jobs:
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # Patch AnyKernel3
+          # Target device AnyKernel3
           sed -i 's/device.name1=.*/device.name1=chime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' AnyKernel3/anykernel.sh
           
-          echo 'if [ -d /sys/touchpanel ]; then echo 1 > /sys/touchpanel/double_tap; fi' >> AnyKernel3/boot-patch.sh
-          
-          # Bikin zip langsung ke folder luar (root)
+          # Injeksi perintah DT2W secara aman
+          printf '\nif [ -d /sys/touchpanel ]; then\n  echo 1 > /sys/touchpanel/double_tap\nfi\n' >> AnyKernel3/boot-patch.sh
+
+          # Buat file zip di root workspace
           cd AnyKernel3
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Hasil Kernel Zip ke Artifacts
+      # 7. Upload Kernel Zip ke Artifacts
       - name: Upload Kernel Zip to Artifacts
         uses: actions/upload-artifact@v4
         with:
