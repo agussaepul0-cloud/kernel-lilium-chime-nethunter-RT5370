@@ -36,7 +36,7 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Hapus instruksi -Werror di Makefile
+          # Bersihkan semua instruksi -Werror di Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Deteksi defconfig
@@ -79,7 +79,7 @@ jobs:
             -e CONFIG_RT2800USB_RT3572 \
             -e CONFIG_RT2800USB_UNKNOWN
 
-          # Enable DT2W
+          # Enable DT2W Config
           ./scripts/config --file out/.config \
             -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
             -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
@@ -105,43 +105,43 @@ jobs:
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      # 6. Pack AnyKernel3 + Firmware RT5370 + DT2W Auto Run
+      # 6. Pack AnyKernel3 Terbaru & Kompatibel (Xiaomi Chime/Lime/Citrus)
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           
+          # Salin file Image Kernel hasil kompilasi
           if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
-            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz-dtb"
+            cp kernel-src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
           elif [ -f kernel-src/out/arch/arm64/boot/Image.gz ]; then
-            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz"
+            cp kernel-src/out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
           elif [ -f kernel-src/out/arch/arm64/boot/Image ]; then
-            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image"
+            cp kernel-src/out/arch/arm64/boot/Image AnyKernel3/Image
           else
-            echo "Error: Image kernel Lilium tidak ditemukan!"
+            echo "Error: File Image Kernel tidak ditemukan!"
             exit 1
           fi
 
-          cp $KERNEL_IMG AnyKernel3/
-          
-          # Salin Modul .ko Kernel
+          # Salin Modul .ko
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
 
           # Download Firmware RT5370 PnP
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # Target device AnyKernel3
-          sed -i 's/device.name1=.*/device.name1=chime/' AnyKernel3/anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=lime/' AnyKernel3/anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=citrus/' AnyKernel3/anykernel.sh
-          
-          # Injeksi perintah DT2W secara aman
-          printf '\nif [ -d /sys/touchpanel ]; then\n  echo 1 > /sys/touchpanel/double_tap\nfi\n' >> AnyKernel3/boot-patch.sh
-
-          # Buat file zip di root workspace
+          # Kustomisasi anykernel.sh untuk Chime/Lime
           cd AnyKernel3
+          sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel for Chime\/Lime/' anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
+          sed -i 's/device.name4=.*/device.name4=lemon/' anykernel.sh
+          sed -i 's/device.name5=.*/device.name5=pomelo/' anykernel.sh
+          sed -i 's/is_slot_device=.*/is_slot_device=0/' anykernel.sh
+
+          # Buat zip di direktori root
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
       # 7. Upload Kernel Zip ke Artifacts
