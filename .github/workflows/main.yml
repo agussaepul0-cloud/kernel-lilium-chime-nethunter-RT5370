@@ -17,7 +17,7 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Set Up Environment & Dependencies
+      # 2. Set Up Environment & Dependencies (Termasuk dtc)
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
@@ -29,14 +29,14 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel Options & Patch -Werror
+      # 4. Configure Kernel Options & Patch -Werror Total
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Bersihkan semua instruksi -Werror di seluruh Makefile
+          # Hapus semua instruksi -Werror di seluruh Makefile (biar Clang 19 gak rewel)
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Otomatis deteksi & muat defconfig vendor/chime
@@ -59,7 +59,7 @@ jobs:
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 (Ralink) & Dependencies
+          # Enable Driver RT5370 (Ralink) & Dependencies Lengkap
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -132,18 +132,18 @@ jobs:
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
-          # Patch AnyKernel3 tanpa berpindah direktori terlebih dahulu
+          # Patch AnyKernel3
           sed -i 's/device.name1=.*/device.name1=chime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' AnyKernel3/anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' AnyKernel3/anykernel.sh
           
           echo 'if [ -d /sys/touchpanel ]; then echo 1 > /sys/touchpanel/double_tap; fi' >> AnyKernel3/boot-patch.sh
           
-          # Masuk direktori AnyKernel3 hanya untuk membuat zip
+          # Bikin zip langsung ke folder luar (root)
           cd AnyKernel3
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Kernel Zip ke Artifacts
+      # 7. Upload Hasil Kernel Zip ke Artifacts
       - name: Upload Kernel Zip to Artifacts
         uses: actions/upload-artifact@v4
         with:
