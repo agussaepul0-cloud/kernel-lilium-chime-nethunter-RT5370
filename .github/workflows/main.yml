@@ -17,7 +17,7 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
           
-      # 2. Set Up Environment (Ditambahkan device-tree-compiler & dtc)
+      # 2. Set Up Environment & Dependencies (Termasuk dtc)
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
@@ -29,12 +29,15 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel Options
+      # 4. Configure Kernel Options & Patch -Werror
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
+          
+          # 1. Hapus paksa semua instruksi -Werror di seluruh Makefile (termasuk techpack/audio)
+          find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Otomatis cari & muat defconfig chime/bengal dari repo Lilium
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
@@ -52,7 +55,7 @@ jobs:
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
-          # Matikan WERROR agar warning Clang 19 tidak dianggap error fatal
+          # Matikan WERROR di level .config
           ./scripts/config --file out/.config -d CONFIG_WERROR
 
           # Enable Driver RT5370 (Ralink) & Injection
@@ -94,7 +97,7 @@ jobs:
             HOSTCC=gcc \
             HOSTCXX=g++ \
             HOSTLD=ld \
-            KCFLAGS="-Wno-error" \
+            KCFLAGS="-Wno-error -Wno-unknown-warning-option" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
