@@ -11,11 +11,11 @@ jobs:
       - name: Checkout Workflow Repository
         uses: actions/checkout@v4
 
-      # 1. Clone Source Code Kernel Xiaomi Chime (Bengal/Lilium)
-      - name: Clone Kernel Source Code
+      # 1. Clone Source Code Kernel Lilium Xiaomi Chime
+      - name: Clone Lilium Kernel Source Code
         run: |
-          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_chime.git -b lineage-18.1 kernel-src || \
-          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b chime-r-oss kernel-src
+          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
+          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
           
       - name: Set Up Environment & Dependencies
         run: |
@@ -35,15 +35,18 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Otomatis cari & muat defconfig chime/bengal yang ada di source code
+          # Otomatis cari & muat defconfig chime/bengal dari repo Lilium
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
             DEFCONFIG="bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
             DEFCONFIG="vendor/chime_defconfig"
-          else
+          elif [ -f arch/arm64/configs/chime_defconfig ]; then
             DEFCONFIG="chime_defconfig"
+          else
+            # Mencari file defconfig pertama yang ada di folder configs
+            DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
           echo "Menggunakan defconfig: $DEFCONFIG"
@@ -76,7 +79,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 4. Compile Kernel
+      # 4. Compile Lilium Kernel Image
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -100,18 +103,18 @@ jobs:
           elif [ -f kernel-src/out/arch/arm64/boot/Image ]; then
             KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image"
           else
-            echo "Error: Image kernel tidak ditemukan!"
+            echo "Error: Image kernel Lilium tidak ditemukan!"
             exit 1
           fi
 
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp $KERNEL_IMG AnyKernel3/
           
-          # Salin Modul .ko
+          # Salin Modul .ko Kernel
           mkdir -p AnyKernel3/modules/system/lib/modules
           find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
 
-          # Firmware RT5370 PnP
+          # Download Firmware RT5370 PnP
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
