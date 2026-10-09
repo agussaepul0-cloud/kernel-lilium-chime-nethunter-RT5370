@@ -36,7 +36,7 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Hapus paksa semua instruksi -Werror di seluruh Makefile (termasuk techpack/audio)
+          # Hapus paksa semua instruksi -Werror di seluruh Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           # Otomatis cari & muat defconfig chime/bengal dari repo Lilium
@@ -55,8 +55,9 @@ jobs:
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
-          # Matikan WERROR di level .config
+          # Matikan WERROR dan Matikan Terpisah DTBO Overlay Build agar tidak error di dts
           ./scripts/config --file out/.config -d CONFIG_WERROR
+          ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
           # Enable Driver RT5370 (Ralink) & Dependency Lengkap
           ./scripts/config --file out/.config \
@@ -109,6 +110,8 @@ jobs:
         run: |
           if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
             KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz-dtb"
+          elif [ -f kernel-src/out/arch/arm64/boot/Image.gz ]; then
+            KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image.gz"
           elif [ -f kernel-src/out/arch/arm64/boot/Image ]; then
             KERNEL_IMG="kernel-src/out/arch/arm64/boot/Image"
           else
