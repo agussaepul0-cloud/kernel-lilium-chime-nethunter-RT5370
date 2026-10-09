@@ -1,4 +1,4 @@
-name: Build NetHunter Kernel - Lilium Clang RT5370
+name: Build Lilium Kernel Chime NetHunter
 
 on:
   workflow_dispatch:
@@ -6,139 +6,109 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Workflow Repository
-        uses: actions/checkout@v4
 
-      - name: Set Up Build Environment
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev libncursesw5-dev libglib2.0-dev libpixman-1-dev python3 python-is-python3 git ccache zip unzip kmod aria2 repo wget
-          sudo ln -sf /usr/bin/python3 /usr/bin/python2 || true
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache
 
-      - name: Clone Lilium Kernel Source Code
+      - name: Download Lilium Clang 19 Toolchain
         run: |
-          # Menggunakan URL resmi Lilium Project tanpa pembatasan branch agar otomatis mendeteksi default branch
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git $GITHUB_WORKSPACE/kernel
+          git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
+          git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      - name: Download Clang & AOSP GCC Toolchains
+      - name: Configure Kernel Options (RT5370 PnP & DT2W Default)
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git $GITHUB_WORKSPACE/clang
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git $GITHUB_WORKSPACE/gcc64
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git $GITHUB_WORKSPACE/gcc32
+          export PATH="$(pwd)/clang/bin:$PATH"
+          mkdir -p out
+          
+          # Load defconfig bawaan chime
+          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld vendor/chime_defconfig
 
-      - name: Clean Kernel Source
-        run: |
-          cd $GITHUB_WORKSPACE/kernel
-          make mrproper || true
-          rm -rf out
+          # Enable Driver RT5370 (Ralink) & Injection
+          ./scripts/config --file out/.config \
+            -e CONFIG_WIRELESS \
+            -e CONFIG_NET_RADIO \
+            -e CONFIG_WLAN \
+            -e CONFIG_NETDEVICES \
+            -e CONFIG_MAC80211 \
+            -e CONFIG_CFG80211 \
+            -e CONFIG_CFG80211_WEXT \
+            -e CONFIG_RT2X00 \
+            -m CONFIG_RT2800USB \
+            -e CONFIG_RT2800USB_RT53XX \
+            -e CONFIG_RT2800USB_RT3572 \
+            -e CONFIG_RT2800USB_UNKNOWN \
+            -e CONFIG_RT2X00_LIB_USB \
+            -e CONFIG_RT2X00_LIB_FIRMWARE \
+            -e CONFIG_RT2X00_LIB_CRYPTO
 
-      - name: Configure Kernel Options (RT5370, Injection, DT2W)
-        run: |
-          cd $GITHUB_WORKSPACE/kernel
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
+          # Enable Double Tap to Wake (DT2W) Config
+          ./scripts/config --file out/.config \
+            -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
+            -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
+            -e CONFIG_PANEL_DOUBLE_TAP \
+            -e CONFIG_DOUBLE_TAP_TO_WAKE
 
-          # Hapus -Werror pada Makefile utama Lilium jika ada
-          sed -i 's/-Werror//g' Makefile || true
-
-          # Deteksi file defconfig secara fleksibel di dalam kernel Lilium
-          DEFCONFIG=""
-          if [ -f "arch/arm64/configs/vendor/lime-perf_defconfig" ]; then
-            DEFCONFIG="vendor/lime-perf_defconfig"
-          elif [ -f "arch/arm64/configs/vendor/chime-perf_defconfig" ]; then
-            DEFCONFIG="vendor/chime-perf_defconfig"
-          elif [ -f "arch/arm64/configs/lime_defconfig" ]; then
-            DEFCONFIG="lime_defconfig"
-          elif [ -f "arch/arm64/configs/chime_defconfig" ]; then
-            DEFCONFIG="chime_defconfig"
-          else
-            DEFCONFIG=$(find arch/arm64/configs -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
-          fi
-
-          echo "Menggunakan defconfig: $DEFCONFIG"
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- $DEFCONFIG
-
-          enable_config() {
-            sed -i "s/# $1 is not set/$1=y/" out/.config
-            grep -q "^$1=" out/.config || echo "$1=y" >> out/.config
-          }
-
-          # 1. Framework Wireless & Packet Injection
-          enable_config CONFIG_NETDEVICES
-          enable_config CONFIG_WLAN
-          enable_config CONFIG_CFG80211
-          enable_config CONFIG_MAC80211
-          enable_config CONFIG_CFG80211_INTERNAL_REGDB
-          enable_config CONFIG_NL80211_TESTMODE
-          enable_config CONFIG_MAC80211_MESH
-
-          # 2. Driver Ralink RT5370 (rt2800usb)
-          enable_config CONFIG_NET_RADIO
-          enable_config CONFIG_WLAN_VENDOR_RALINK
-          enable_config CONFIG_RT2X00
-          enable_config CONFIG_RT2800USB
-          enable_config CONFIG_RT2800USB_RT35XX
-          enable_config CONFIG_RT2800USB_RT53XX
-          enable_config CONFIG_RT2800USB_UNKNOWN
-          enable_config CONFIG_RT2X00_LIB_USB
-          enable_config CONFIG_RT2X00_LIB
-          enable_config CONFIG_RT2X00_LIB_FIRMWARE
-
-          # 3. Fitur Double Tap to Wake (DT2W)
-          enable_config CONFIG_TOUCHSCREEN_COMMON
-          enable_config CONFIG_TOUCHSCREEN_XIAOMI_TOUCH
-          enable_config CONFIG_TOUCHSCREEN_DT2W
-
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- olddefconfig
+          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
       - name: Compile Lilium Kernel Image
         run: |
-          cd $GITHUB_WORKSPACE/kernel
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH"
+          export PATH="$(pwd)/clang/bin:$PATH"
           
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
-            HOSTCC=clang \
+            HOSTCC=gcc \
+            HOSTCXX=g++ \
+            HOSTLD=ld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
-            Image.gz-dtb
+            CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-      - name: Check Build Output
+      - name: Package with AnyKernel3 (Include Firmware & Auto-DT2W Boot Script)
         run: |
-          if [ ! -f $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            echo "ERROR: File Image.gz-dtb Lilium tidak ditemukan! Kompilasi gagal."
+          if [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            KERNEL_IMG="out/arch/arm64/boot/Image.gz-dtb"
+          elif [ -f out/arch/arm64/boot/Image ]; then
+            KERNEL_IMG="out/arch/arm64/boot/Image"
+          else
+            echo "Error: Image kernel Lilium tidak ditemukan!"
             exit 1
           fi
 
-      - name: Package Kernel via AnyKernel3 (Inject Firmware & Auto DT2W)
-        run: |
-          cd $GITHUB_WORKSPACE
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          cp $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cp $KERNEL_IMG AnyKernel3/
+          
+          # 1. Salin Modul .ko Kernel
+          mkdir -p AnyKernel3/modules/system/lib/modules
+          find out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+
+          # 2. Download Firmware Ralink RT5370 untuk PnP Wi-Fi
+          mkdir -p AnyKernel3/modules/system/etc/firmware
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
+
+          # 3. Injeksikan Skrip Auto-Enable DT2W di Ramdisk saat Booting
           cd AnyKernel3
-          
-          sed -i 's/device.name1=.*/device.name1=lime/' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=chime/' anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
-
-          mkdir -p ramdisk/overlay/system/etc/firmware
-          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O ramdisk/overlay/system/etc/firmware/rt2870.bin
-
-          sed -i '/# boot shell script/a insert_line init.rc "on property:sys.boot_completed=1" "exec -- /system/bin/sh -c \\"echo 1 > /sys/touchpanel/double_tap\\""' anykernel.sh
           
-          zip -r9 ../NetHunter-Lilium-Kernel-RT5370.zip ./* -x .git\* README.md
+          # Menulis skrip init khusus di AnyKernel3 agar dijalankan tiap HP booting
+          cat << 'EOF' >> boot-patch.sh
+          if [ -d /sys/touchpanel ]; then
+            echo 1 > /sys/touchpanel/double_tap
+          fi
+          EOF
+          
+          zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      - name: Upload Flashable Kernel Zip
-        uses: actions/upload-artifact@v4
+      - name: Upload Kernel Zip to Artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: NetHunter-Lilium-Kernel-RT5370
-          path: NetHunter-Lilium-Kernel-RT5370.zip
+          name: Lilium-NetHunter-Chime-Kernel
+          path: Lilium-NetHunter-Chime-Kernel.zip
