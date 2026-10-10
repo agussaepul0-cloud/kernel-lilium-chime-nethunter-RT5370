@@ -1,0 +1,143 @@
+name: Build Lilium Kernel Chime NetHunter
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Workflow Repository
+        uses: actions/checkout@v4
+
+      - name: Clone Kernel Source Code
+        run: |
+          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
+
+      - name: Clone Kernel Qcom Dependencies
+        run: |
+          git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git kernel-src/kernel_qcom || true
+
+      - name: Clone LLVM Project
+        run: |
+          git clone --depth=1 https://github.com/liliumproject/llvm-project.git llvm-project || true
+
+      - name: Set Up Environment & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
+
+      - name: Download & Extract Clang Toolchain
+        run: |
+          rm -rf clang
+          mkdir -p clang
+          wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C clang --strip-components=1 || tar -xzf clang.tar.gz -C clang
+          rm clang.tar.gz
+
+      - name: Configure Kernel Options
+        run: |
+          cd kernel-src
+          export PATH="$(pwd)/../clang/bin:$PATH"
+          mkdir -p out
+          
+          if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
+            DEFCONFIG="vendor/bengal-perf_defconfig"
+          elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
+            DEFCONFIG="bengal-perf_defconfig"
+          elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
+            DEFCONFIG="vendor/chime_defconfig"
+          elif [ -f arch/arm64/configs/chime_defconfig ]; then
+            DEFCONFIG="chime_defconfig"
+          else
+            DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
+          fi
+
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld $DEFCONFIG
+
+          ./scripts/config --file out/.config -d CONFIG_WERROR
+          ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
+
+          # Enable Driver RT5370 Wi-Fi
+          ./scripts/config --file out/.config \
+            -e CONFIG_WIRELESS \
+            -e CONFIG_NET_RADIO \
+            -e CONFIG_WLAN \
+            -e CONFIG_NETDEVICES \
+            -e CONFIG_MAC80211 \
+            -e CONFIG_CFG80211 \
+            -e CONFIG_CFG80211_WEXT \
+            -e CONFIG_RT2X00 \
+            -e CONFIG_RT2X00_LIB \
+            -e CONFIG_RT2800_LIB \
+            -e CONFIG_RT2X00_LIB_USB \
+            -e CONFIG_RT2X00_LIB_FIRMWARE \
+            -e CONFIG_RT2X00_LIB_CRYPTO \
+            -e CONFIG_RT2800USB \
+            -e CONFIG_RT2800USB_RT53XX \
+            -e CONFIG_RT2800USB_RT3572 \
+            -e CONFIG_RT2800USB_UNKNOWN
+
+          # Enable Double Tap to Wake (DT2W)
+          ./scripts/config --file out/.config \
+            -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
+            -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
+            -e CONFIG_PANEL_DOUBLE_TAP \
+            -e CONFIG_DOUBLE_TAP_TO_WAKE
+
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld olddefconfig
+
+      - name: Compile Lilium Kernel Image
+        run: |
+          cd kernel-src
+          export PATH="$(pwd)/../clang/bin:$PATH"
+          
+          make -j$(nproc --all) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            HOSTCXX=clang++ \
+            HOSTLD=ld.lld \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            KBUILD_CFLAGS="-w"
+
+      - name: Package with AnyKernel3
+        run: |
+          rm -rf AnyKernel3
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          
+          if [ -f kernel-src/out/arch/arm64/boot/Image.gz-dtb ]; then
+            cp kernel-src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
+          elif [ -f kernel-src/out/arch/arm64/boot/Image.gz ]; then
+            cp kernel-src/out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
+          elif [ -f kernel-src/out/arch/arm64/boot/Image ]; then
+            cp kernel-src/out/arch/arm64/boot/Image AnyKernel3/Image
+          else
+            echo "Error: File Image Kernel tidak ditemukan!"
+            exit 1
+          fi
+
+          mkdir -p AnyKernel3/modules/system/lib/modules
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+
+          mkdir -p AnyKernel3/modules/system/etc/firmware
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
+
+          cd AnyKernel3
+          sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel Chime\/Lime/' anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
+
+          zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lilium-NetHunter-Chime-Kernel
+          path: Lilium-NetHunter-Chime-Kernel.zip
