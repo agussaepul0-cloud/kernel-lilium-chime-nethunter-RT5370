@@ -11,33 +11,36 @@ jobs:
       - name: Checkout Workflow Repository
         uses: actions/checkout@v4
 
-      # 1. Clone Source Code Kernel
-      - name: Clone Lilium Kernel Source Code
+      # 1. Clone Source Code Kernel Utama Lilium Chime
+      - name: Clone Kernel Source Code
         run: |
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Set Up Dependencies
+      # 2. Clone Kernel Qcom Dependency yang Diperlukan Lilium
+      - name: Clone Kernel Qcom Dependencies
+        run: |
+          git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git kernel-src/kernel_qcom || true
+
+      # 3. Set Up Dependencies Sistem
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
 
-      # 3. Download Toolchain
-      - name: Download Lilium Clang 19 Toolchain
+      # 4. Download & Ekstrak Lilium Clang Toolchain Otomatis
+      - name: Download Lilium Clang Toolchain
         run: |
-          git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
-          git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
+          mkdir -p clang
+          wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C clang --strip-components=1 || tar -xzf clang.tar.gz -C clang
+          rm clang.tar.gz
 
-      # 4. Configure Kernel & Pembersihan Flag Aman
+      # 5. Konfigurasi Kernel, Driver RT5370, & DT2W
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
-          
-          # Pembersihan flag -Werror yang presisi tanpa merusak sintaks Makefile
-          find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror\b//g' {} +
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
@@ -51,7 +54,7 @@ jobs:
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld $DEFCONFIG
 
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
@@ -83,9 +86,9 @@ jobs:
             -e CONFIG_PANEL_DOUBLE_TAP \
             -e CONFIG_DOUBLE_TAP_TO_WAKE
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
+          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld olddefconfig
 
-      # 5. Compile Kernel Image (KBUILD_CFLAGS "-w" untuk mengabaikan warning)
+      # 6. Kompilasi Kernel dengan Toolchain Resmi Lilium
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -94,15 +97,17 @@ jobs:
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
-            HOSTCC=gcc \
-            HOSTCXX=g++ \
-            HOSTLD=ld \
+            HOSTCC=clang \
+            HOSTCXX=clang++ \
+            HOSTLD=ld.lld \
+            LLVM=1 \
+            LLVM_IAS=1 \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             KBUILD_CFLAGS="-w"
 
-      # 6. AnyKernel3 Packaging
+      # 7. AnyKernel3 Packaging
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
@@ -120,7 +125,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
@@ -133,7 +138,7 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Artifact Ke GitHub
+      # 8. Upload Artifact Resmi GitHub
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
