@@ -17,26 +17,28 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Dependencies
+      # 2. Set Up Dependencies
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
 
-      # 3. Toolchain
+      # 3. Download Toolchain
       - name: Download Lilium Clang 19 Toolchain
         run: |
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel & RT5370 + DT2W
+      # 4. Configure Kernel & Pembersihan Flag Clang
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
+          # Hapus -Werror beserta sub-option berawalan = agar tidak membingungkan Clang 19
+          find . -type f \( -name "Makefile*" -o -name "Kbuild*" -o -name "*.mk" \) -exec sed -i 's/-Werror=[^ ]*//g' {} +
+          find . -type f \( -name "Makefile*" -o -name "Kbuild*" -o -name "*.mk" \) -exec sed -i 's/-Werror//g' {} +
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
@@ -52,9 +54,11 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
+          # Matikan WERROR & DTBO Overlay
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
+          # Enable Driver RT5370 Wi-Fi
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -74,6 +78,7 @@ jobs:
             -e CONFIG_RT2800USB_RT3572 \
             -e CONFIG_RT2800USB_UNKNOWN
 
+          # Enable Double Tap to Wake (DT2W)
           ./scripts/config --file out/.config \
             -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
             -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
@@ -82,7 +87,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 5. Compile (KCFLAGS dibersihkan agar Clang 19 tidak error)
+      # 5. Compile Kernel Image (KBUILD_CFLAGS ditambahkan pembersihan warning)
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -96,9 +101,10 @@ jobs:
             HOSTLD=ld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi-
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            KBUILD_CFLAGS="-w"
 
-      # 6. AnyKernel3
+      # 6. AnyKernel3 Packaging
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
@@ -116,7 +122,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
@@ -129,7 +135,7 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Artifact Resmi GitHub
+      # 7. Upload Artifact Ke GitHub
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
