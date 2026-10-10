@@ -3,9 +3,6 @@ name: Build Lilium Kernel Chime NetHunter
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,21 +11,25 @@ jobs:
       - name: Checkout Workflow Repository
         uses: actions/checkout@v4
 
+      # 1. Clone Source Code Kernel
       - name: Clone Lilium Kernel Source Code
         run: |
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b main kernel-src || \
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
+      # 2. Dependencies
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
 
+      # 3. Toolchain
       - name: Download Lilium Clang 19 Toolchain
         run: |
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
+      # 4. Configure Kernel & RT5370 + DT2W
       - name: Configure Kernel Options
         run: |
           cd kernel-src
@@ -49,7 +50,6 @@ jobs:
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
           ./scripts/config --file out/.config -d CONFIG_WERROR
@@ -82,6 +82,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
+      # 5. Compile
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -98,6 +99,7 @@ jobs:
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
+      # 6. AnyKernel3
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
@@ -115,7 +117,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
@@ -128,13 +130,9 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v2
+      # 7. Upload Artifact Ke GitHub (Bawaan Resmi)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v1.0-${{ github.run_number }}
-          name: Lilium NetHunter Kernel Chime Build #${{ github.run_number }}
-          files: Lilium-NetHunter-Chime-Kernel.zip
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: Lilium-NetHunter-Chime-Kernel
+          path: Lilium-NetHunter-Chime-Kernel.zip
