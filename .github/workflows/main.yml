@@ -82,7 +82,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 5. Compile
+      # 5. Compile (KCFLAGS dibersihkan agar Clang 19 tidak error)
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -94,7 +94,6 @@ jobs:
             HOSTCC=gcc \
             HOSTCXX=g++ \
             HOSTLD=ld \
-            KCFLAGS="-Wno-error -Wno-unknown-warning-option" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
@@ -130,10 +129,9 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Langsung ke Bashupload & Munculkan Link Download di Log
-      - name: Upload Kernel to Direct Link
-        run: |
-          echo "Mengunggah file kernel ke server download langsung..."
-          curl --upload-file Lilium-NetHunter-Chime-Kernel.zip https://bashupload.com/Lilium-NetHunter-Chime-Kernel.zip
-          echo ""
-          echo "SUKSES! Salin tautan unduhan (URL) yang muncul di atas baris ini ke browser HP kamu untuk mendownloadnya secara langsung!"
+      # 7. Upload Artifact Resmi GitHub
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lilium-NetHunter-Chime-Kernel
+          path: Lilium-NetHunter-Chime-Kernel.zip
