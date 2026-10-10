@@ -13,15 +13,15 @@ jobs:
 
       - name: Clone Kernel Source Code
         run: |
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
+          git clone https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
       - name: Clone Kernel Qcom Dependencies
         run: |
-          git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git kernel-src/kernel_qcom || true
+          git clone https://github.com/liliumproject/kernel_qcom.git kernel-src/kernel_qcom
 
       - name: Clone LLVM Project
         run: |
-          git clone --depth=1 https://github.com/liliumproject/llvm-project.git llvm-project || true
+          git clone https://github.com/liliumproject/llvm-project.git llvm-project
 
       - name: Set Up Environment & Dependencies
         run: |
@@ -33,13 +33,13 @@ jobs:
           rm -rf clang
           mkdir -p clang
           wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
-          tar -xzf clang.tar.gz -C clang --strip-components=1 || tar -xzf clang.tar.gz -C clang
+          tar -xzf clang.tar.gz -C clang --strip-components=1
           rm clang.tar.gz
 
       - name: Configure Kernel Options
         run: |
           cd kernel-src
-          export PATH="$(pwd)/../clang/bin:$PATH"
+          export PATH="$(pwd)/../clang/bin:$(pwd)/../llvm-project/bin:$PATH"
           mkdir -p out
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
@@ -91,7 +91,7 @@ jobs:
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
-          export PATH="$(pwd)/../clang/bin:$PATH"
+          export PATH="$(pwd)/../clang/bin:$(pwd)/../llvm-project/bin:$PATH"
           
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
@@ -132,7 +132,7 @@ jobs:
           sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel Chime\/Lime/' anykernel.sh
           sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh 2>/dev/null || true
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
