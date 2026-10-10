@@ -117,7 +117,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
@@ -130,9 +130,10 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Artifact Ke GitHub (Bawaan Resmi)
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lilium-NetHunter-Chime-Kernel
-          path: Lilium-NetHunter-Chime-Kernel.zip
+      # 7. Upload Langsung ke Bashupload & Munculkan Link Download di Log
+      - name: Upload Kernel to Direct Link
+        run: |
+          echo "Mengunggah file kernel ke server download langsung..."
+          curl --upload-file Lilium-NetHunter-Chime-Kernel.zip https://bashupload.com/Lilium-NetHunter-Chime-Kernel.zip
+          echo ""
+          echo "SUKSES! Salin tautan unduhan (URL) yang muncul di atas baris ini ke browser HP kamu untuk mendownloadnya secara langsung!"
