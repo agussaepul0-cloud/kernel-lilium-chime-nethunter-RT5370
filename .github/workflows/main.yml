@@ -11,31 +11,30 @@ jobs:
       - name: Checkout Workflow Repository
         uses: actions/checkout@v4
 
-      # 1. Clone Source Code Kernel Utama Lilium Chime
       - name: Clone Kernel Source Code
         run: |
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel-src
 
-      # 2. Clone Kernel Qcom Dependency yang Diperlukan Lilium
       - name: Clone Kernel Qcom Dependencies
         run: |
           git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git kernel-src/kernel_qcom || true
 
-      # 3. Set Up Dependencies Sistem
+      - name: Clone LLVM Project
+        run: |
+          git clone --depth=1 https://github.com/liliumproject/llvm-project.git llvm-project || true
+
       - name: Set Up Environment & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
 
-      # 4. Download & Ekstrak Lilium Clang Toolchain Otomatis
-      - name: Download Lilium Clang Toolchain
+      - name: Download & Extract Clang Toolchain
         run: |
           mkdir -p clang
           wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
           tar -xzf clang.tar.gz -C clang --strip-components=1 || tar -xzf clang.tar.gz -C clang
           rm clang.tar.gz
 
-      # 5. Konfigurasi Kernel, Driver RT5370, & DT2W
       - name: Configure Kernel Options
         run: |
           cd kernel-src
@@ -88,7 +87,6 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld olddefconfig
 
-      # 6. Kompilasi Kernel dengan Toolchain Resmi Lilium
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -107,7 +105,6 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             KBUILD_CFLAGS="-w"
 
-      # 7. AnyKernel3 Packaging
       - name: Package with AnyKernel3
         run: |
           rm -rf AnyKernel3
@@ -138,7 +135,6 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 8. Upload Artifact Resmi GitHub
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
