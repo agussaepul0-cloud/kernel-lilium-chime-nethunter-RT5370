@@ -85,7 +85,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 5. Compile Kernel Image (Diberi LLVM=1 dan Subarch ARM64 penuh)
+      # 5. Compile Kernel Image (Fix Target AArch64 untuk Clang 19)
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -93,14 +93,15 @@ jobs:
           
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            SUBARCH=arm64 \
-            LLVM=1 \
-            LLVM_IAS=1 \
             CC=clang \
+            HOSTCC=gcc \
+            HOSTCXX=g++ \
+            HOSTLD=ld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            KBUILD_CFLAGS="-w"
+            KCFLAGS="--target=aarch64-linux-gnu -w" \
+            KCPPFLAGS="--target=aarch64-linux-gnu"
 
       # 6. AnyKernel3 Packaging
       - name: Package with AnyKernel3
