@@ -3,6 +3,9 @@ name: Build Lilium Kernel Chime NetHunter
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,7 +39,6 @@ jobs:
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          # Bersihkan instruksi -Werror di Makefile
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
@@ -54,11 +56,9 @@ jobs:
           echo "Menggunakan defconfig: $DEFCONFIG"
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld $DEFCONFIG
 
-          # Disable WERROR dan DTBO Build
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 & Dependencies
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -78,7 +78,6 @@ jobs:
             -e CONFIG_RT2800USB_RT3572 \
             -e CONFIG_RT2800USB_UNKNOWN
 
-          # Enable DT2W Config
           ./scripts/config --file out/.config \
             -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
             -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
@@ -122,7 +121,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
@@ -135,20 +134,14 @@ jobs:
 
           zip -r9 ../Lilium-NetHunter-Chime-Kernel.zip * -x .git README.md
 
-      # 7. Upload Kernel Zip ke Artifacts & GitHub Releases (Biar 100% Aman)
-      - name: Upload Kernel Zip to Artifacts
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: Lilium-NetHunter-Chime-Kernel
-          path: Lilium-NetHunter-Chime-Kernel.zip
-
-      - name: Create GitHub Release
+      # 7. Terbitkan Langsung ke Menu Releases Repo GitHub
+      - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
-        if: always()
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Lilium NetHunter Kernel Build #${{ github.run_number }}
+          tag_name: v1.0-${{ github.run_number }}
+          name: Lilium NetHunter Kernel Chime Build #${{ github.run_number }}
           files: Lilium-NetHunter-Chime-Kernel.zip
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
