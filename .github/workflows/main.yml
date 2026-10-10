@@ -29,15 +29,15 @@ jobs:
           git clone --depth=1 https://github.com/liliumproject/llvm-project.git -b main clang || \
           git clone --depth=1 https://gitlab.com/liliumproject/lilium-clang.git clang
 
-      # 4. Configure Kernel & Pembersihan Flag Clang
+      # 4. Configure Kernel & Pembersihan Flag Aman
       - name: Configure Kernel Options
         run: |
           cd kernel-src
           export PATH="$(pwd)/../clang/bin:$PATH"
           mkdir -p out
           
-          find . -type f \( -name "Makefile*" -o -name "Kbuild*" -o -name "*.mk" \) -exec sed -i 's/-Werror=[^ ]*//g' {} +
-          find . -type f \( -name "Makefile*" -o -name "Kbuild*" -o -name "*.mk" \) -exec sed -i 's/-Werror//g' {} +
+          # Pembersihan flag -Werror yang presisi tanpa merusak sintaks Makefile
+          find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror\b//g' {} +
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
@@ -85,7 +85,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld olddefconfig
 
-      # 5. Compile Kernel Image (Fix Target AArch64 untuk Clang 19)
+      # 5. Compile Kernel Image (KBUILD_CFLAGS "-w" untuk mengabaikan warning)
       - name: Compile Lilium Kernel Image
         run: |
           cd kernel-src
@@ -98,10 +98,9 @@ jobs:
             HOSTCXX=g++ \
             HOSTLD=ld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            KCFLAGS="--target=aarch64-linux-gnu -w" \
-            KCPPFLAGS="--target=aarch64-linux-gnu"
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            KBUILD_CFLAGS="-w"
 
       # 6. AnyKernel3 Packaging
       - name: Package with AnyKernel3
@@ -121,7 +120,7 @@ jobs:
           fi
 
           mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          find kernel-src/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/devnull || true
 
           mkdir -p AnyKernel3/modules/system/etc/firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
