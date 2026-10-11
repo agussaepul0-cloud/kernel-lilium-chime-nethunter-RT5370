@@ -1,4 +1,4 @@
-name: Build Pure Lilium Kernel Chime NetHunter
+Name: Kernel_Valeryn-Nethunter-Chime-RT5370_Driver
 
 on:
   workflow_dispatch:
@@ -8,127 +8,184 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Install Essential Tools & Dependencies
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential bc libncurses5-dev libssl-dev libelf-dev \
-            flex bison zip unzip git ccache wget device-tree-compiler \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python-is-python3 \
-            python2 || true
-          
-          if [ -f /usr/bin/python2 ]; then
-            sudo ln -sf /usr/bin/python2 /usr/local/bin/python
-          fi
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Clone Lilium Kernel & Dependencies Repositories
+      - name: Clone Kernel Source & Toolchain
         run: |
-          git clone https://github.com/liliumproject/kernel_xiaomi_chime.git kernel
-          git clone https://github.com/liliumproject/kernel_qcom.git kernel/kernel_qcom
+          # Menggunakan source PixelExperience yang stabil untuk audio Chime
+          git clone https://github.com/PixelExperience-Devices/android_kernel_xiaomi_chime -b thirteen --depth=1 kernel || git clone https://github.com/PixelExperience-Devices/android_kernel_xiaomi_chime --depth=1 kernel
+          git clone https://github.com/kdrag0n/proton-clang --depth=1 clang
 
-      - name: Download and Extract Official Lilium Clang Release
-        run: |
-          mkdir -p clang
-          wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O lilium_clang.tar.gz
-          tar -xf lilium_clang.tar.gz -C clang/
-          rm -f lilium_clang.tar.gz
-
-      - name: Configure and Compile Pure Lilium Kernel
-        shell: bash
+      - name: Configure Kernel
         run: |
           cd kernel
 
-          # Path prioritas ke Clang Lilium
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # Variabel teks biasa untuk menghindari syntax error tanda kurung pada bash runner
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
+          MAKE_ARGS=(
+            CC=clang
+            LLVM=1
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          )
 
+          # Bersihkan direktori output
           rm -rf out
           mkdir -p out
 
-          # Deteksi defconfig yang paling akurat untuk Chime/Lime
-          if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
-            DEFCONFIG="vendor/bengal-perf_defconfig"
-          elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
-            DEFCONFIG="vendor/chime_defconfig"
-          elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
-            DEFCONFIG="bengal-perf_defconfig"
-          else
-            DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
-          fi
+          # 1. Load Defconfig Murni Xiaomi Chime
+          make O=out "${MAKE_ARGS[@]}" vendor/bengal-perf_defconfig || make O=out "${MAKE_ARGS[@]}" bengal-perf_defconfig
 
-          echo "Menggunakan Defconfig: $DEFCONFIG"
-          make O=out $MAKE_ARGS $DEFCONFIG
+          # 2. Injeksi Driver Wireless NetHunter RT5370 & Core HID
+          scripts/config --file out/.config --enable CONFIG_NET
+          scripts/config --file out/.config --enable CONFIG_WIRELESS
+          scripts/config --file out/.config --enable CONFIG_WLAN
+          scripts/config --file out/.config --enable CONFIG_NET_RADIO
+          scripts/config --file out/.config --enable CONFIG_CFG80211
+          scripts/config --file out/.config --enable CONFIG_MAC80211
+          scripts/config --file out/.config --enable CONFIG_MAC80211_LEDS
+          scripts/config --file out/.config --enable CONFIG_MAC80211_MESH
+          scripts/config --file out/.config --enable CONFIG_PACKET
+          scripts/config --file out/.config --enable CONFIG_NL80211_TESTMODE
+          scripts/config --file out/.config --enable CONFIG_CFG80211_INTERNAL_REGDB
+          scripts/config --file out/.config --enable CONFIG_CFG80211_CERTIFICATION_ONUS
+          scripts/config --file out/.config --disable CONFIG_CFG80211_REQUIRE_SIGNED_REGDB
 
-          # Matikan Werror agar peringatan compiler tidak dianggap fatal error
-          ./scripts/config --file out/.config -d CONFIG_WERROR
+          # USB OTG & Firmware Loading Support
+          scripts/config --file out/.config --enable CONFIG_FW_LOADER
+          scripts/config --file out/.config --enable CONFIG_EXTRA_FIRMWARE
+          scripts/config --file out/.config --enable CONFIG_USB_OTG
+          scripts/config --file out/.config --enable CONFIG_USB_MON
 
-          # Fokus Driver RT5370 & RT2800USB Plug & Play Support
-          ./scripts/config --file out/.config \
-            -e CONFIG_WIRELESS \
-            -e CONFIG_NET_RADIO \
-            -e CONFIG_WLAN \
-            -e CONFIG_NETDEVICES \
-            -e CONFIG_MAC80211 \
-            -e CONFIG_CFG80211 \
-            -e CONFIG_CFG80211_WEXT \
-            -e CONFIG_RT2X00 \
-            -e CONFIG_RT2X00_LIB \
-            -e CONFIG_RT2800_LIB \
-            -e CONFIG_RT2X00_LIB_USB \
-            -e CONFIG_RT2X00_LIB_FIRMWARE \
-            -e CONFIG_RT2X00_LIB_CRYPTO \
-            -e CONFIG_RT2800USB \
-            -e CONFIG_RT2800USB_RT53XX \
-            -e CONFIG_RT2800USB_RT3572 \
-            -e CONFIG_RT2800USB_UNKNOWN
+          # HID & Tunneling Support
+          scripts/config --file out/.config --enable CONFIG_TUN
+          scripts/config --file out/.config --enable CONFIG_USB_CONFIGFS_F_HID
+          scripts/config --file out/.config --enable CONFIG_USB_F_HID
 
-          # Fokus DT2W Default Enable & Kontrol sysfs
-          ./scripts/config --file out/.config \
-            -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
-            -e CONFIG_PANEL_DOUBLE_TAP \
-            -e CONFIG_DOUBLE_TAP_TO_WAKE \
-            -e CONFIG_TOUCHSCREEN_DUMMY_DT2W
+          # Driver RT5370 (Ralink)
+          scripts/config --file out/.config --enable CONFIG_STAGING
+          scripts/config --file out/.config --enable CONFIG_USB_SUPPORT
+          scripts/config --file out/.config --enable CONFIG_USB
+          scripts/config --file out/.config --enable CONFIG_USB_NET_DRIVERS
+          scripts/config --file out/.config --enable CONFIG_RT2X00
+          scripts/config --file out/.config --enable CONFIG_RT2800USB
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT33XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT35XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT53XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_UNKNOWN
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_USB
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_FIRMWARE
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_CRYPTO
 
-          make O=out $MAKE_ARGS olddefconfig
+          # 3. Aktifkan DT2W di Level Kernel
+          scripts/config --file out/.config --enable CONFIG_TOUCHSCREEN_DOUBLE_TAP
 
-          # Proses Kompilasi Utama
-          make -j$(nproc --all) O=out $MAKE_ARGS Image.gz-dtb || make -j$(nproc --all) O=out $MAKE_ARGS Image.gz || make -j$(nproc --all) O=out $MAKE_ARGS Image
+          # 4. Regenerasi Kconfig Dependensi
+          make O=out "${MAKE_ARGS[@]}" olddefconfig
 
-      - name: Package with AnyKernel3
+          # 5. Kompilasi Kernel Image & DTB
+          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
+
+      - name: Repack Installer AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          
-          if [ -f kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
-          elif [ -f kernel/out/arch/arm64/boot/Image.gz ]; then
-            cp kernel/out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
-          elif [ -f kernel/out/arch/arm64/boot/Image ]; then
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+
+          # Salin Image Kernel
+          if [ -f kernel/out/arch/arm64/boot/Image ]; then
             cp kernel/out/arch/arm64/boot/Image AnyKernel3/Image
           else
-            echo "Error: File Image Kernel tidak ditemukan!"
-            exit 1
+            echo "Error: Image file not found!" && exit 1
           fi
 
-          mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \; 2>/dev/null || true
+          # Salin file DTB
+          if [ -f kernel/out/arch/arm64/boot/dtb.img ]; then
+            cp kernel/out/arch/arm64/boot/dtb.img AnyKernel3/dtb
+          elif [ -f kernel/out/arch/arm64/boot/dtb ]; then
+            cp kernel/out/arch/arm64/boot/dtb AnyKernel3/dtb
+          elif [ -f kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb ]; then
+            cp kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb AnyKernel3/dtb
+          fi
 
-          mkdir -p AnyKernel3/modules/system/etc/firmware
-          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
+          [ -f kernel/out/arch/arm64/boot/dtbo.img ] && cp kernel/out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
+
+          # Salin modul kernel
+          mkdir -p AnyKernel3/modules/system/lib/modules
+          find kernel/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \;
 
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Pure Lilium NetHunter Chime (RT5370 + DT2W)/' anykernel.sh
-          sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh 2>/dev/null || true
 
-          zip -r9 ../Pure-Lilium-NetHunter-Chime.zip * -x .git README.md
+          cat << 'EOF' > anykernel.sh
+          ### AnyKernel3 Ramdisk Mod Script
+          ## osm0sis @ xda-developers
 
-      - name: Upload Artifact
+          ### AnyKernel setup
+          # begin properties
+          properties() { '
+          kernel.string=chime-PE Kernel NetHunter
+          do.devicecheck=0
+          do.modules=1
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          supported.versions=
+          supported.patchlevels=
+          '; } # end properties
+
+          ## Boot Shell Variables
+          if [ -b /dev/block/by-name/boot ]; then
+            block=/dev/block/by-name/boot;
+          elif [ -b /dev/block/bootdevice/by-name/boot ]; then
+            block=/dev/block/bootdevice/by-name/boot;
+          else
+            block=auto;
+          fi
+
+          is_slot_device=0;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+
+          # import functions/variables and setup patching
+          . tools/ak3-core.sh && attributes;
+
+          # boot install
+          dump_boot;
+
+          # Use the provided dtb
+          if [ -f /tmp/anykernel/dtb ]; then
+            mv /tmp/anykernel/dtb /tmp/anykernel/split_img/
+          fi
+
+          # Service Double Tap To Wake (DT2W) Auto Enable
+          if [ -f /sys/touchpanel/double_tap ]; then
+            write /sys/touchpanel/double_tap 1;
+          fi
+
+          if [ -d /data/adb/service.d ]; then
+            echo '#!/system/bin/sh' > /data/adb/service.d/dt2w.sh
+            echo 'sleep 5' >> /data/adb/service.d/dt2w.sh
+            echo 'echo 1 > /sys/touchpanel/double_tap' >> /data/adb/service.d/dt2w.sh
+            chmod 755 /data/adb/service.d/dt2w.sh
+          fi
+
+          write_boot;
+          EOF
+
+          chmod -R 755 tools/
+
+          zip -r9 Kernel_Valeryn-Nethunter-Chime-RT5370_Driver.zip * -x .git README.md
+
+      - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Pure-Lilium-NetHunter-Chime
-          path: Pure-Lilium-NetHunter-Chime.zip
+          name: Kernel_Valeryn-Nethunter-Chime-RT5370_Driver
+          path: AnyKernel3/Kernel_Valeryn-Nethunter-Chime-RT5370_Driver.zip
