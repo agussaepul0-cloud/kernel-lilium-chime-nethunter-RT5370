@@ -28,19 +28,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Download & Extract Clang Toolchain (Opsional/Cadangan)
-        run: |
-          rm -rf clang
-          mkdir -p clang
-          wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
-          tar -xzf clang.tar.gz -C clang --strip-components=1 || true
-          rm clang.tar.gz
-
-      - name: Configure Kernel Options
+      - name: Configure Kernel Options & Patch Drivers
         run: |
           cd kernel-src
           mkdir -p out
           
+          # Hapus baris media drivers yang error dari Makefile utama jika ada
+          sed -i '/drivers\/media/d' drivers/Makefile || true
+
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
