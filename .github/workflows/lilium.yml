@@ -6,18 +6,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    container:
-      image: ubuntu:18.04
-      options: --privileged
 
     steps:
       - name: Install Essential Tools & Dependencies
         run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update && apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             build-essential bc libncurses5-dev libssl-dev libelf-dev \
             flex bison zip unzip git ccache wget device-tree-compiler \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python python3
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python-is-python3
 
       - name: Clone Lilium Kernel & Dependencies Repositories
         run: |
@@ -36,12 +33,20 @@ jobs:
         run: |
           cd kernel
 
-          # Set PATH ke Clang Lilium hasil ekstrak
+          # Path prioritas ke Clang Lilium
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
-          MAKE_ARGS="ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
+          MAKE_ARGS=(
+            ARCH=arm64
+            SUBARCH=arm64
+            CC=clang
+            LLVM=1
+            LLVM_IAS=1
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          )
 
           rm -rf out
           mkdir -p out
@@ -55,7 +60,7 @@ jobs:
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out $MAKE_ARGS $DEFCONFIG
+          make O=out "${MAKE_ARGS[@]}" $DEFCONFIG
 
           # Matikan Werror
           ./scripts/config --file out/.config -d CONFIG_WERROR
@@ -87,10 +92,10 @@ jobs:
             -e CONFIG_PANEL_DOUBLE_TAP \
             -e CONFIG_DOUBLE_TAP_TO_WAKE
 
-          make O=out $MAKE_ARGS olddefconfig
+          make O=out "${MAKE_ARGS[@]}" olddefconfig
 
           # Kompilasi murni menggunakan Clang Lilium
-          make -j$(nproc --all) O=out $MAKE_ARGS Image.gz-dtb || make -j$(nproc --all) O=out $MAKE_ARGS Image.gz || make -j$(nproc --all) O=out $MAKE_ARGS Image
+          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz-dtb || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
 
       - name: Package with AnyKernel3
         run: |
