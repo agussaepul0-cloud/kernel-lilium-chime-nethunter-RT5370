@@ -1,4 +1,4 @@
-name: Build Lilium Kernel Chime NetHunter (Docker 20.04)
+name: Build Pure Lilium Kernel Chime NetHunter
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     container:
-      image: ubuntu:20.04
+      image: ubuntu:18.04
       options: --privileged
 
     steps:
@@ -17,47 +17,43 @@ jobs:
           apt-get update && apt-get install -y \
             build-essential bc libncurses5-dev libssl-dev libelf-dev \
             flex bison zip unzip git ccache wget device-tree-compiler \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python python3
 
-      - name: Clone Kernel Source & Dependencies (Lilium)
+      - name: Clone All Official Lilium Repositories
         run: |
-          git clone https://github.com/liliumproject/kernel_xiaomi_chime.git --depth=1 kernel
-          git clone https://github.com/liliumproject/kernel_qcom.git --depth=1 kernel/kernel_qcom 2>/dev/null || true
-          git clone https://github.com/liliumproject/llvm-project.git --depth=1 llvm-project 2>/dev/null || true
+          git clone https://github.com/liliumproject/kernel_xiaomi_chime.git kernel
+          git clone https://github.com/liliumproject/kernel_qcom.git kernel/kernel_qcom
+          git clone https://github.com/liliumproject/llvm-project.git llvm-project
+          git clone https://github.com/liliumproject/clang.git clang
 
-      - name: Configure and Compile Kernel
+      - name: Configure and Compile Pure Lilium Kernel
+        shell: bash
         run: |
           cd kernel
 
-          export PATH="$GITHUB_WORKSPACE/llvm-project/bin:$PATH"
+          # Menggunakan Clang dari repo resmi Lilium
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/llvm-project/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
-          MAKE_ARGS=(
-            ARCH=arm64
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          )
+          MAKE_ARGS="ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
 
           rm -rf out
           mkdir -p out
 
-          # Cari dan gunakan defconfig yang sesuai
+          # Load defconfig Lilium
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
-          elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
-            DEFCONFIG="bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
             DEFCONFIG="vendor/chime_defconfig"
           else
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out "${MAKE_ARGS[@]}" $DEFCONFIG
+          make O=out $MAKE_ARGS $DEFCONFIG
 
-          # Nonaktifkan opsi yang memicu error galat ketat
+          # Matikan Werror
           ./scripts/config --file out/.config -d CONFIG_WERROR
-          ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
           # Enable Driver RT5370 Wi-Fi & NetHunter Support
           ./scripts/config --file out/.config \
@@ -86,10 +82,10 @@ jobs:
             -e CONFIG_PANEL_DOUBLE_TAP \
             -e CONFIG_DOUBLE_TAP_TO_WAKE
 
-          make O=out "${MAKE_ARGS[@]}" olddefconfig
+          make O=out $MAKE_ARGS olddefconfig
 
-          # Proses Kompilasi Kernel Image
-          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz-dtb || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
+          # Kompilasi murni menggunakan Clang Lilium
+          make -j$(nproc --all) O=out $MAKE_ARGS Image.gz-dtb || make -j$(nproc --all) O=out $MAKE_ARGS Image.gz || make -j$(nproc --all) O=out $MAKE_ARGS Image
 
       - name: Package with AnyKernel3
         run: |
@@ -113,15 +109,15 @@ jobs:
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Lilium NetHunter Kernel Chime\/Lime/' anykernel.sh
+          sed -i 's/kernel.string=.*/kernel.string=Pure Lilium NetHunter Chime/' anykernel.sh
           sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh 2>/dev/null || true
 
-          zip -r9 ../Lilium-NetHunter-Chime-Docker.zip * -x .git README.md
+          zip -r9 ../Pure-Lilium-NetHunter-Chime.zip * -x .git README.md
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lilium-NetHunter-Chime-Docker
-          path: Lilium-NetHunter-Chime-Docker.zip
+          name: Pure-Lilium-NetHunter-Chime
+          path: Pure-Lilium-NetHunter-Chime.zip
