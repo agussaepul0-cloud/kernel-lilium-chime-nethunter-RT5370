@@ -28,7 +28,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Configure Kernel Options & Disable Problematic Drivers
+      - name: Configure Kernel Options
         run: |
           cd kernel-src
           mkdir -p out
@@ -49,13 +49,6 @@ jobs:
 
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
-
-          # Menonaktifkan modul media drivers yang menyebabkan error di server modern
-          ./scripts/config --file out/.config \
-            -d CONFIG_MEDIA_SUPPORT \
-            -d CONFIG_MEDIA_CAMERA_SUPPORT \
-            -d CONFIG_VIDEO_DEV \
-            -d CONFIG_VIDEO_V4L2
 
           # Enable Driver RT5370 Wi-Fi
           ./scripts/config --file out/.config \
@@ -94,8 +87,8 @@ jobs:
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            KBUILD_CFLAGS="-w -Wno-error" \
-            KBUILD_CPPFLAGS="-Wno-error"
+            KBUILD_CFLAGS="-w -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types -Wno-error=int-conversion" \
+            KBUILD_CPPFLAGS="-w"
 
       - name: Package with AnyKernel3
         run: |
