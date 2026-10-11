@@ -23,23 +23,22 @@ jobs:
         run: |
           git clone https://github.com/liliumproject/llvm-project.git llvm-project
 
-      - name: Set Up Environment & Dependencies
+      - name: Set Up Environment & GCC Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Download & Extract Clang Toolchain
+      - name: Download & Extract Clang Toolchain (Opsional/Cadangan)
         run: |
           rm -rf clang
           mkdir -p clang
           wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O clang.tar.gz
-          tar -xzf clang.tar.gz -C clang --strip-components=1
+          tar -xzf clang.tar.gz -C clang --strip-components=1 || true
           rm clang.tar.gz
 
       - name: Configure Kernel Options
         run: |
           cd kernel-src
-          export PATH="$(pwd)/../clang/bin:$(pwd)/../llvm-project/bin:$PATH"
           mkdir -p out
           
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
@@ -54,12 +53,12 @@ jobs:
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld $DEFCONFIG
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $DEFCONFIG
 
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
 
-          # Enable Driver RT5370 Wi-Fi (Modul USB WiFi)
+          # Enable Driver RT5370 Wi-Fi
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -86,31 +85,16 @@ jobs:
             -e CONFIG_PANEL_DOUBLE_TAP \
             -e CONFIG_DOUBLE_TAP_TO_WAKE
 
-          make O=out ARCH=arm64 CC=clang HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld olddefconfig
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-      - name: Compile Lilium Kernel Image
+      - name: Compile Lilium Kernel Image with GCC
         run: |
           cd kernel-src
-          export PATH="$(pwd)/../clang/bin:$(pwd)/../llvm-project/bin:$PATH"
           
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            HOSTCXX=clang++ \
-            HOSTLD=ld.lld \
-            LLVM=1 \
-            LLVM_IAS=1 \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            READELF=llvm-readelf \
-            STRIP=llvm-strip \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            KBUILD_CFLAGS="-w -Wno-error"
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
       - name: Package with AnyKernel3
         run: |
