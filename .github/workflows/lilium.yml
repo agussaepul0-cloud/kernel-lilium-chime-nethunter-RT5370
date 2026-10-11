@@ -14,7 +14,12 @@ jobs:
           sudo apt-get install -y \
             build-essential bc libncurses5-dev libssl-dev libelf-dev \
             flex bison zip unzip git ccache wget device-tree-compiler \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python-is-python3
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python-is-python3 \
+            python2 || true
+          
+          if [ -f /usr/bin/python2 ]; then
+            sudo ln -sf /usr/bin/python2 /usr/local/bin/python
+          fi
 
       - name: Clone Lilium Kernel & Dependencies Repositories
         run: |
@@ -38,34 +43,30 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
 
-          MAKE_ARGS=(
-            ARCH=arm64
-            SUBARCH=arm64
-            CC=clang
-            LLVM=1
-            LLVM_IAS=1
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          )
+          # Variabel teks biasa untuk menghindari syntax error tanda kurung pada bash runner
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
 
           rm -rf out
           mkdir -p out
 
-          # Load defconfig Lilium
+          # Deteksi defconfig yang paling akurat untuk Chime/Lime
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
             DEFCONFIG="vendor/chime_defconfig"
+          elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
+            DEFCONFIG="bengal-perf_defconfig"
           else
             DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out "${MAKE_ARGS[@]}" $DEFCONFIG
+          echo "Menggunakan Defconfig: $DEFCONFIG"
+          make O=out $MAKE_ARGS $DEFCONFIG
 
-          # Matikan Werror
+          # Matikan Werror agar peringatan compiler tidak dianggap fatal error
           ./scripts/config --file out/.config -d CONFIG_WERROR
 
-          # Enable Driver RT5370 Wi-Fi & NetHunter Support
+          # Fokus Driver RT5370 & RT2800USB Plug & Play Support
           ./scripts/config --file out/.config \
             -e CONFIG_WIRELESS \
             -e CONFIG_NET_RADIO \
@@ -85,17 +86,17 @@ jobs:
             -e CONFIG_RT2800USB_RT3572 \
             -e CONFIG_RT2800USB_UNKNOWN
 
-          # Enable Double Tap to Wake (DT2W)
+          # Fokus DT2W Default Enable & Kontrol sysfs
           ./scripts/config --file out/.config \
-            -e CONFIG_TOUCHSCREEN_DUMMY_DT2W \
             -e CONFIG_TOUCHSCREEN_XIAOMI_TOUCH \
             -e CONFIG_PANEL_DOUBLE_TAP \
-            -e CONFIG_DOUBLE_TAP_TO_WAKE
+            -e CONFIG_DOUBLE_TAP_TO_WAKE \
+            -e CONFIG_TOUCHSCREEN_DUMMY_DT2W
 
-          make O=out "${MAKE_ARGS[@]}" olddefconfig
+          make O=out $MAKE_ARGS olddefconfig
 
-          # Kompilasi murni menggunakan Clang Lilium
-          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz-dtb || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image.gz || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
+          # Proses Kompilasi Utama
+          make -j$(nproc --all) O=out $MAKE_ARGS Image.gz-dtb || make -j$(nproc --all) O=out $MAKE_ARGS Image.gz || make -j$(nproc --all) O=out $MAKE_ARGS Image
 
       - name: Package with AnyKernel3
         run: |
@@ -119,7 +120,7 @@ jobs:
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2800.bin -O AnyKernel3/modules/system/etc/firmware/rt2800.bin || true
 
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Pure Lilium NetHunter Chime/' anykernel.sh
+          sed -i 's/kernel.string=.*/kernel.string=Pure Lilium NetHunter Chime (RT5370 + DT2W)/' anykernel.sh
           sed -i 's/device.name1=.*/device.name1=chime/' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=lime/' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=citrus/' anykernel.sh 2>/dev/null || true
