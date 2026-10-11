@@ -19,20 +19,25 @@ jobs:
             flex bison zip unzip git ccache wget device-tree-compiler \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python python3
 
-      - name: Clone All Official Lilium Repositories
+      - name: Clone Lilium Kernel & Dependencies Repositories
         run: |
           git clone https://github.com/liliumproject/kernel_xiaomi_chime.git kernel
           git clone https://github.com/liliumproject/kernel_qcom.git kernel/kernel_qcom
-          git clone https://github.com/liliumproject/llvm-project.git llvm-project
-          git clone https://github.com/liliumproject/clang.git clang
+
+      - name: Download and Extract Official Lilium Clang Release
+        run: |
+          mkdir -p clang
+          wget -q https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz -O lilium_clang.tar.gz
+          tar -xf lilium_clang.tar.gz -C clang/
+          rm -f lilium_clang.tar.gz
 
       - name: Configure and Compile Pure Lilium Kernel
         shell: bash
         run: |
           cd kernel
 
-          # Menggunakan Clang dari repo resmi Lilium
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/llvm-project/bin:$PATH"
+          # Set PATH ke Clang Lilium hasil ekstrak
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
