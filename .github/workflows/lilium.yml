@@ -28,14 +28,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev libelf-dev flex bison zip unzip git ccache device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Configure Kernel Options & Patch Drivers
+      - name: Configure Kernel Options & Disable Problematic Drivers
         run: |
           cd kernel-src
           mkdir -p out
           
-          # Hapus baris media drivers yang error dari Makefile utama jika ada
-          sed -i '/drivers\/media/d' drivers/Makefile || true
-
           if [ -f arch/arm64/configs/vendor/bengal-perf_defconfig ]; then
             DEFCONFIG="vendor/bengal-perf_defconfig"
           elif [ -f arch/arm64/configs/bengal-perf_defconfig ]; then
@@ -52,6 +49,13 @@ jobs:
 
           ./scripts/config --file out/.config -d CONFIG_WERROR
           ./scripts/config --file out/.config -d CONFIG_BUILD_ARM64_DT_OVERLAY
+
+          # Menonaktifkan modul media drivers yang menyebabkan error di server modern
+          ./scripts/config --file out/.config \
+            -d CONFIG_MEDIA_SUPPORT \
+            -d CONFIG_MEDIA_CAMERA_SUPPORT \
+            -d CONFIG_VIDEO_DEV \
+            -d CONFIG_VIDEO_V4L2
 
           # Enable Driver RT5370 Wi-Fi
           ./scripts/config --file out/.config \
@@ -89,7 +93,9 @@ jobs:
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            KBUILD_CFLAGS="-w -Wno-error" \
+            KBUILD_CPPFLAGS="-Wno-error"
 
       - name: Package with AnyKernel3
         run: |
