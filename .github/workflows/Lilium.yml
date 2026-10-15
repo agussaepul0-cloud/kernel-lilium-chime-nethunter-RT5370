@@ -21,8 +21,9 @@ jobs:
       - name: Clone Kernel Source & Toolchain
         run: |
           git clone https://github.com/liliumproject/kernel_xiaomi_chime.git --depth=1 kernel
-          # Menggunakan AOSP Clang yang stabil dan kompatibel untuk Kernel 4.19
-          git clone https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b --depth=1 clang
+          # Menggunakan AOSP Clang r416183b resmi Google yang publik dan kompatibel
+          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b android12-release clang_repo
+          mv clang_repo/clang-r416183b clang || git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang
 
       - name: Configure Kernel
         run: |
