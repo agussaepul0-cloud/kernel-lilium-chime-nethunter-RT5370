@@ -42,10 +42,13 @@ jobs:
           rm -rf out
           mkdir -p out
 
-          # 1. Load Defconfig Murni Bawaan Lilium / Chime
+          # 1. Patch khusus perbaikan error dm-crypt Lilium
+          sed -i 's/ti->limit_swap_bios = true;/\/\/ ti->limit_swap_bios = true;/g' drivers/md/dm-crypt.c 2>/dev/null || true
+
+          # 2. Load Defconfig Murni Bawaan Lilium / Chime
           make O=out "${MAKE_ARGS[@]}" vendor/bengal-perf_defconfig
 
-          # 2. Injeksi Driver Wireless NetHunter RT5370 & Core HID
+          # 3. Injeksi Driver Wireless NetHunter RT5370 & Core HID
           scripts/config --file out/.config --enable CONFIG_NET
           scripts/config --file out/.config --enable CONFIG_WIRELESS
           scripts/config --file out/.config --enable CONFIG_WLAN
@@ -86,13 +89,13 @@ jobs:
           scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_FIRMWARE
           scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_CRYPTO
 
-          # 3. Aktifkan DT2W secara Default di Level Kernel
+          # 4. Aktifkan DT2W secara Default di Level Kernel
           scripts/config --file out/.config --enable CONFIG_TOUCHSCREEN_DOUBLE_TAP
 
-          # 4. Regenerasi Kconfig Dependensi
+          # 5. Regenerasi Kconfig Dependensi
           make O=out "${MAKE_ARGS[@]}" olddefconfig
 
-          # 5. Kompilasi Kernel Image & DTB
+          # 6. Kompilasi Kernel Image & DTB
           make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
 
       - name: Repack Installer AnyKernel3
