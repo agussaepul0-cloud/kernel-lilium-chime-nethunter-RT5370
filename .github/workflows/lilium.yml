@@ -1,10 +1,10 @@
-name: Build Redmi 9T Kernel (RT5370 & DT2W)
+name: Build Redmi 9T Kernel (Pure Test)
 
 on:
-  workflow_dispatch: # Supaya bisa di-run manual
+  workflow_dispatch:
   push:
     branches:
-      - '*' # Otomatis run setiap ada push di branch manapun
+      - '*'
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Environment & Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex cpio libssl-dev git zip unzip wget ccache
+          sudo apt-get install -y build-essential bc bison flex cpio libssl-dev git zip unzip wget
 
       - name: Download & Extract Lilium Clang
         run: |
@@ -26,84 +26,16 @@ jobs:
           tar -xf clang.tar.gz
           echo "/tmp/clang/bin" >> $GITHUB_PATH
 
-      - name: Apply Kernel Patches & Fixes
-        run: |
-          # 1. Patch module.c
-          if [ -f "kernel/module.c" ]; then
-            sed -i 's/module_assert_mutex();/\/\* module_assert_mutex(); \*\//g' kernel/module.c
-          fi
-
-          # 2. Patch dm-crypt.c
-          if [ -f "drivers/md/dm-crypt.c" ]; then
-            sed -i 's/ti->limit_swap_bios = true;/\/\* ti->limit_swap_bios = true; \*\//g' drivers/md/dm-crypt.c
-          fi
-
-          # 3. Patch wcd-mbhc-v2.c
-          if [ -f "techpack/audio/asoc/codecs/wcd-mbhc-v2.c" ]; then
-            sed -i 's/switch_dev_unregister(&accdet_data);/\/\* switch_dev_unregister(&accdet_data); \*\//g' techpack/audio/asoc/codecs/wcd-mbhc-v2.c
-          fi
-
-          # 4. Fix MSM Bus Trace Makefile
-          MSM_MAKEFILE="drivers/soc/qcom/msm_bus/Makefile"
-          if [ -f "$MSM_MAKEFILE" ] && ! grep -q "msm_bus_trace.o" "$MSM_MAKEFILE"; then
-            echo -e "\nmsm_bus_core-y += msm_bus_trace.o" >> "$MSM_MAKEFILE"
-          fi
-
-      - name: Inject Custom Configs (RT5370 & DT2W)
-        run: |
-          DEFCONFIG="arch/arm64/configs/vendor/bengal-perf_defconfig"
-          
-          cat << 'EOF' >> "$DEFCONFIG"
-
-          # Dynamic Module Support
-          CONFIG_MODULES=y
-          CONFIG_MODULE_UNLOAD=y
-
-          # Stack Wireless Lengkap (Syarat RT5370)
-          CONFIG_NET_WIRELESS=y
-          CONFIG_WLAN=y
-          CONFIG_CFG80211=y
-          CONFIG_CFG80211_WEXT=y
-          CONFIG_MAC80211=y
-          CONFIG_MAC80211_HAS_RC=y
-          CONFIG_MAC80211_RC_MINSTREL=y
-          CONFIG_MAC80211_RC_MINSTREL_HT=y
-          CONFIG_MAC80211_RC_DEFAULT_MINSTREL=y
-
-          # Driver Ralink RT2X00 & RT5370
-          CONFIG_RT2X00=y
-          CONFIG_RT2X00_LIB=y
-          CONFIG_RT2X00_LIB_USB=y
-          CONFIG_RT2800USB=y
-          CONFIG_RT2800USB_RT33XX=y
-          CONFIG_RT2800USB_RT35XX=y
-          CONFIG_RT2800USB_RT53XX=y
-          CONFIG_RT2800USB_UNKNOWN=y
-          CONFIG_RT2X00_LIB_FIRMWARE=y
-          CONFIG_RT2X00_LIB_CRYPTO=y
-          CONFIG_RT2X00_LIB_LEDS=y
-
-          # Double Tap to Wake (DT2W)
-          CONFIG_TOUCHSCREEN_GESTURE=y
-          CONFIG_TOUCHSCREEN_DOUBLE_TAP_WAKE=y
-
-          # MSM Bus Tracing & Scaling Fix
-          CONFIG_TRACEPOINTS=y
-          CONFIG_TRACING=y
-          CONFIG_MSM_BUS_SCALING=y
-          CONFIG_BUS_TOPOLOGY_ADHOC=y
-          CONFIG_MSM_BUS_TRACING=y
-          EOF
-
-      - name: Compile Kernel
+      - name: Compile Kernel Pure
         env:
           ARCH: arm64
           SUBARCH: arm64
         run: |
           mkdir -p out
+          # Generate defconfig murni bawaan kernel
           make O=out CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=/usr/bin/ld LLVM=1 LLVM_IAS=1 vendor/bengal-perf_defconfig
-          make O=out CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=/usr/bin/ld LLVM=1 LLVM_IAS=1 olddefconfig
           
+          # Mulai kompilasi tanpa modifikasi
           make -j$(nproc --all) \
             O=out \
             CC=clang \
@@ -124,14 +56,14 @@ jobs:
             rm -rf /tmp/AnyKernel3/.git
             cp out/arch/arm64/boot/Image.gz-dtb /tmp/AnyKernel3/
             cd /tmp/AnyKernel3
-            zip -r9 /home/runner/Kernel_Redmi9T_RT5370_DT2W.zip *
+            zip -r9 /home/runner/Kernel_Redmi9T_Pure.zip *
           else
             echo "Kernel Image.gz-dtb tidak ditemukan!"
             exit 1
           fi
 
-      - name: Upload Flashable Zip Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Redmi9T_RT5370_DT2W
-          path: /home/runner/Kernel_Redmi9T_RT5370_DT2W.zip
+          name: Kernel_Redmi9T_Pure
+          path: /home/runner/Kernel_Redmi9T_Pure.zip
