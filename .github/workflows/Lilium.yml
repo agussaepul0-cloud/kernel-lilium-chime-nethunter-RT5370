@@ -20,8 +20,7 @@ jobs:
 
       - name: Clone Kernel Source & Toolchain
         run: |
-          # Menggunakan source kernel Lilium
-          git clone https://github.com/Lilium-Project/android_kernel_xiaomi_chime --depth=1 kernel
+          git clone https://github.com/liliumproject/kernel_xiaomi_chime.git --depth=1 kernel
           git clone https://github.com/kdrag0n/proton-clang --depth=1 clang
 
       - name: Configure Kernel
