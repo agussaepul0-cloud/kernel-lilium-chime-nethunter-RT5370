@@ -1,68 +1,191 @@
-name: Build Redmi 9T Kernel (Lilium Pure Test)
+name: Kernel_Lilium-Nethunter-Chime-RT5370_Driver
 
 on:
-  workflow_dispatch: # Hanya jalan saat ditekan tombol "Run workflow"
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # Wajib 22.04 agar tidak dibatalkan GitHub
-    steps:
-      - name: Checkout Kernel Source
-        uses: actions/checkout@v4
+    runs-on: ubuntu-22.04
 
-      - name: Set up Environment & Dependencies
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential bc bison flex cpio libssl-dev git zip unzip wget curl \
-            crossbuild-essential-arm64 crossbuild-essential-armhf libncurses5-dev
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Download & Extract Lilium Clang (Release 20250912)
+      - name: Clone Kernel Source & Toolchain
         run: |
-          mkdir -p /tmp/clang
-          cd /tmp/clang
-          wget -q https://github.com/LiliumProject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz
-          tar -xf lilium_clang-20250912.tar.gz
-          echo "/tmp/clang/bin" >> $GITHUB_PATH
+          # Menggunakan source kernel Lilium
+          git clone https://github.com/Lilium-Project/android_kernel_xiaomi_chime --depth=1 kernel
+          git clone https://github.com/kdrag0n/proton-clang --depth=1 clang
 
-      - name: Compile Kernel Pure
-        env:
-          ARCH: arm64
-          SUBARCH: arm64
+      - name: Configure Kernel
         run: |
+          cd kernel
+
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+
+          MAKE_ARGS=(
+            CC=clang
+            LLVM=1
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          )
+
+          # Bersihkan direktori output
+          rm -rf out
           mkdir -p out
-          # Generate defconfig murni bawaan kernel
-          make O=out CC=clang HOSTCC=gcc HOSTCXX=g++ HOSTLD=/usr/bin/ld LLVM=1 LLVM_IAS=1 vendor/bengal-perf_defconfig
-          
-          # Memulai kompilasi murni
-          make -j$(nproc --all) \
-            O=out \
-            CC=clang \
-            HOSTCC=gcc \
-            HOSTCXX=g++ \
-            HOSTLD=/usr/bin/ld \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            LLVM=1 \
-            LLVM_IAS=1 \
-            KCFLAGS=-Wno-error
 
-      - name: Package with AnyKernel3
+          # 1. Load Defconfig Murni Bawaan Lilium / Chime
+          make O=out "${MAKE_ARGS[@]}" vendor/bengal-perf_defconfig
+
+          # 2. Injeksi Driver Wireless NetHunter RT5370 & Core HID
+          scripts/config --file out/.config --enable CONFIG_NET
+          scripts/config --file out/.config --enable CONFIG_WIRELESS
+          scripts/config --file out/.config --enable CONFIG_WLAN
+          scripts/config --file out/.config --enable CONFIG_NET_RADIO
+          scripts/config --file out/.config --enable CONFIG_CFG80211
+          scripts/config --file out/.config --enable CONFIG_MAC80211
+          scripts/config --file out/.config --enable CONFIG_MAC80211_LEDS
+          scripts/config --file out/.config --enable CONFIG_MAC80211_MESH
+          scripts/config --file out/.config --enable CONFIG_PACKET
+          scripts/config --file out/.config --enable CONFIG_NL80211_TESTMODE
+          scripts/config --file out/.config --enable CONFIG_CFG80211_INTERNAL_REGDB
+          scripts/config --file out/.config --enable CONFIG_CFG80211_CERTIFICATION_ONUS
+          scripts/config --file out/.config --disable CONFIG_CFG80211_REQUIRE_SIGNED_REGDB
+
+          # USB OTG & Firmware Loading Support
+          scripts/config --file out/.config --enable CONFIG_FW_LOADER
+          scripts/config --file out/.config --enable CONFIG_EXTRA_FIRMWARE
+          scripts/config --file out/.config --enable CONFIG_USB_OTG
+          scripts/config --file out/.config --enable CONFIG_USB_MON
+
+          # HID & Tunneling Support
+          scripts/config --file out/.config --enable CONFIG_TUN
+          scripts/config --file out/.config --enable CONFIG_USB_CONFIGFS_F_HID
+          scripts/config --file out/.config --enable CONFIG_USB_F_HID
+
+          # Driver RT5370 (Ralink)
+          scripts/config --file out/.config --enable CONFIG_STAGING
+          scripts/config --file out/.config --enable CONFIG_USB_SUPPORT
+          scripts/config --file out/.config --enable CONFIG_USB
+          scripts/config --file out/.config --enable CONFIG_USB_NET_DRIVERS
+          scripts/config --file out/.config --enable CONFIG_RT2X00
+          scripts/config --file out/.config --enable CONFIG_RT2800USB
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT33XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT35XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT53XX
+          scripts/config --file out/.config --enable CONFIG_RT2800USB_UNKNOWN
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_USB
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_FIRMWARE
+          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_CRYPTO
+
+          # 3. Aktifkan DT2W secara Default di Level Kernel
+          scripts/config --file out/.config --enable CONFIG_TOUCHSCREEN_DOUBLE_TAP
+
+          # 4. Regenerasi Kconfig Dependensi
+          make O=out "${MAKE_ARGS[@]}" olddefconfig
+
+          # 5. Kompilasi Kernel Image & DTB
+          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image
+
+      - name: Repack Installer AnyKernel3
         run: |
-          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
-            git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1 /tmp/AnyKernel3
-            rm -rf /tmp/AnyKernel3/.git
-            cp out/arch/arm64/boot/Image.gz-dtb /tmp/AnyKernel3/
-            cd /tmp/AnyKernel3
-            zip -r9 /home/runner/Kernel_Redmi9T_Lilium_Pure.zip *
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+
+          # Salin Image Kernel
+          if [ -f kernel/out/arch/arm64/boot/Image ]; then
+            cp kernel/out/arch/arm64/boot/Image AnyKernel3/Image
           else
-            echo "Kernel Image.gz-dtb tidak ditemukan!"
-            exit 1
+            echo "Error: Image file not found!" && exit 1
           fi
 
-      - name: Upload Artifact
+          # Salin file DTB
+          if [ -f kernel/out/arch/arm64/boot/dtb.img ]; then
+            cp kernel/out/arch/arm64/boot/dtb.img AnyKernel3/dtb
+          elif [ -f kernel/out/arch/arm64/boot/dtb ]; then
+            cp kernel/out/arch/arm64/boot/dtb AnyKernel3/dtb
+          elif [ -f kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb ]; then
+            cp kernel/out/arch/arm64/boot/dts/vendor/qcom/bengal.dtb AnyKernel3/dtb
+          fi
+
+          [ -f kernel/out/arch/arm64/boot/dtbo.img ] && cp kernel/out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
+
+          # Salin modul kernel
+          mkdir -p AnyKernel3/modules/system/lib/modules
+          find kernel/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/system/lib/modules/ \;
+
+          cd AnyKernel3
+
+          cat << 'EOF' > anykernel.sh
+          ### AnyKernel3 Ramdisk Mod Script
+          ## osm0sis @ xda-developers
+
+          ### AnyKernel setup
+          # begin properties
+          properties() { '
+          kernel.string=Lilium Kernel NetHunter RT5370
+          do.devicecheck=0
+          do.modules=1
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          supported.versions=
+          supported.patchlevels=
+          '; } # end properties
+
+          ## Boot Shell Variables (Anti Error 1 TWRP)
+          if [ -b /dev/block/by-name/boot ]; then
+            block=/dev/block/by-name/boot;
+          elif [ -b /dev/block/bootdevice/by-name/boot ]; then
+            block=/dev/block/bootdevice/by-name/boot;
+          else
+            block=auto;
+          fi
+
+          is_slot_device=0;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+
+          # import functions/variables and setup patching
+          . tools/ak3-core.sh && attributes;
+
+          # boot install
+          dump_boot;
+
+          # Use the provided dtb
+          if [ -f /tmp/anykernel/dtb ]; then
+            mv /tmp/anykernel/dtb /tmp/anykernel/split_img/
+          fi
+
+          # Service Double Tap To Wake (DT2W) Auto Enable
+          if [ -f /sys/touchpanel/double_tap ]; then
+            write /sys/touchpanel/double_tap 1;
+          fi
+
+          if [ -d /data/adb/service.d ]; then
+            echo '#!/system/bin/sh' > /data/adb/service.d/dt2w.sh
+            echo 'sleep 5' >> /data/adb/service.d/dt2w.sh
+            echo 'echo 1 > /sys/touchpanel/double_tap' >> /data/adb/service.d/dt2w.sh
+            chmod 755 /data/adb/service.d/dt2w.sh
+          fi
+
+          write_boot;
+          EOF
+
+          chmod -R 755 tools/
+
+          zip -r9 Kernel_Lilium-Nethunter-Chime-RT5370_Driver.zip * -x .git README.md
+
+      - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Redmi9T_Lilium_Pure
-          path: /home/runner/Kernel_Redmi9T_Lilium_Pure.zip
+          name: Kernel_Lilium-Nethunter-Chime-RT5370_Driver
+          path: AnyKernel3/Kernel_Lilium-Nethunter-Chime-RT5370_Driver.zip
