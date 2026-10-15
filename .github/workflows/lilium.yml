@@ -1,14 +1,11 @@
 name: Build Redmi 9T Kernel (Lilium Pure Test)
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - '*'
+  workflow_dispatch: # Hanya bisa dijalankan secara manual dari tab Actions
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
