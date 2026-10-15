@@ -13,19 +13,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install Dependencies & LLVM/Clang
+      - name: Install Dependencies & Toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi clang-12 lld-12 llvm-12
-          
-          # Tambahkan symlink lengkap termasuk llvm-objcopy
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-12 100
-          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/lld-12 100
-          sudo update-alternatives --install /usr/bin/llvm-objdump llvm-objdump /usr/bin/llvm-objdump-12 100
-          sudo update-alternatives --install /usr/bin/llvm-objcopy llvm-objcopy /usr/bin/llvm-objcopy-12 100
-          sudo update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-12 100
-          sudo update-alternatives --install /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-12 100
-          sudo update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-12 100
 
       - name: Clone Kernel Source
         run: |
@@ -39,10 +30,10 @@ jobs:
           export SUBARCH=arm64
 
           MAKE_ARGS=(
-            CC=clang
-            LLVM=1
+            CC=clang-12
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            CLANG_TRIPLE=aarch64-linux-gnu-
           )
 
           # Bersihkan direktori output
@@ -106,7 +97,7 @@ jobs:
           make O=out "${MAKE_ARGS[@]}" olddefconfig
 
           # 7. Kompilasi Kernel Image & DTB
-          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error" Image
+          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error -fno-integrated-as" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error -fno-integrated-as" Image
 
       - name: Repack Installer AnyKernel3
         run: |
