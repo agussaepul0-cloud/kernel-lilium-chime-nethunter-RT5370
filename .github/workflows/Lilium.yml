@@ -13,30 +13,26 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Clang Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi clang-12 lld-12 llvm-12
 
-      - name: Clone Kernel Source & Toolchain
+      - name: Clone Kernel Source
         run: |
-          # Clone Source Kernel Lilium
           git clone https://github.com/liliumproject/kernel_xiaomi_chime.git --depth=1 kernel
-          
-          # Clone Toolchain AOSP Clang r416183b yang Kompatibel
-          git clone https://gitlab.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b.git --depth=1 clang
 
       - name: Configure Kernel
         run: |
           cd kernel
 
-          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
 
           MAKE_ARGS=(
-            CC=clang
+            CC=clang-12
             LLVM=1
+            LLVM_IAS=1
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           )
@@ -101,8 +97,8 @@ jobs:
           # 6. Regenerasi Kconfig Dependensi
           make O=out "${MAKE_ARGS[@]}" olddefconfig
 
-          # 7. Kompilasi Kernel Image & DTB
-          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error" Image
+          # 7. Kompilasi Kernel Image & DTB (Dengan penanganan warning)
+          make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error -Wno-unused-function -Wno-implicit-fallthrough" Image dtbs dtbo.img || make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" KCFLAGS="-Wno-error" Image
 
       - name: Repack Installer AnyKernel3
         run: |
