@@ -1,7 +1,10 @@
 name: Build Redmi 9T Kernel (RT5370 & DT2W)
 
 on:
-  workflow_dispatch: # Bisa dijalankan manual lewat tab Actions di GitHub
+  workflow_dispatch: # Supaya bisa di-run manual
+  push:
+    branches:
+      - '*' # Otomatis run setiap ada push di branch manapun
 
 jobs:
   build:
@@ -19,7 +22,6 @@ jobs:
         run: |
           mkdir -p /tmp/clang
           cd /tmp/clang
-          # Mengunduh Lilium Clang versi terbaru
           wget -qO clang.tar.gz "$(curl -s https://api.github.com/repos/LiliumProject/lilium-clang/releases/latest | grep "browser_download_url" | cut -d '"' -f 4 | grep "tar.gz" | head -n 1)"
           tar -xf clang.tar.gz
           echo "/tmp/clang/bin" >> $GITHUB_PATH
