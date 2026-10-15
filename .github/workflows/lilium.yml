@@ -1,7 +1,7 @@
 name: Build Redmi 9T Kernel (Lilium Pure Test)
 
 on:
-  workflow_dispatch: # Hanya bisa dijalankan secara manual dari tab Actions
+  workflow_dispatch:
 
 jobs:
   build:
