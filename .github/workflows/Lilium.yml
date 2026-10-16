@@ -1,4 +1,4 @@
-Name: Build Kernel Redmi 9T (Chime)
+name: Build Kernel Redmi 9T (Chime)
 
 on:
   workflow_dispatch:
@@ -41,7 +41,6 @@ jobs:
       - name: Patch Kernel Sources
         run: |
           cd source
-          # Memperbaiki error implicit declaration / missing module_assert_mutex pada kernel/module.c
           if [ -f kernel/module.c ]; then
             sed -i '/module_assert_mutex();/i #ifndef module_assert_mutex\n#define module_assert_mutex()\n#endif' kernel/module.c || true
           fi
