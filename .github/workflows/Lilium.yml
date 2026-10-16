@@ -54,7 +54,7 @@ jobs:
           export KBUILD_BUILD_USER=Agus
           export KBUILD_BUILD_HOST=GitHub-Actions
 
-          make O=out vendor/chime-perf_defconfig
+          make O=out vendor/bengal-perf_defconfig
           make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
