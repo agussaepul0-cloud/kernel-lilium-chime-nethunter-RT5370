@@ -1,4 +1,4 @@
-name: Build Kernel Redmi 9T (Chime)
+Name: Build Kernel Redmi 9T (Chime)
 
 on:
   workflow_dispatch:
@@ -38,6 +38,14 @@ jobs:
           rm -rf source/techpack/audio/asoc/codecs
           git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git -b msm-4.19 source/techpack/audio/asoc/codecs
 
+      - name: Patch Kernel Sources
+        run: |
+          cd source
+          # Memperbaiki error implicit declaration / missing module_assert_mutex pada kernel/module.c
+          if [ -f kernel/module.c ]; then
+            sed -i '/module_assert_mutex();/i #ifndef module_assert_mutex\n#define module_assert_mutex()\n#endif' kernel/module.c || true
+          fi
+
       - name: Compile Kernel
         run: |
           cd source
@@ -51,7 +59,8 @@ jobs:
           make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            KCFLAGS="-Wno-error=implicit-function-declaration"
 
       - name: Verify Build Output
         run: |
