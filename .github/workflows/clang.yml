@@ -1,0 +1,26 @@
+name: Download and Extract Clang
+
+on:
+  workflow_dispatch: # Agar workflow bisa dijalankan secara manual dari tab Actions
+
+jobs:
+  download-and-extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Clang Archive
+        run: |
+          wget https://github.com/liliumproject/clang/releases/download/20250912/lilium_clang-20250912.tar.gz
+
+      - name: Extract Clang
+        run: |
+          mkdir -p clang
+          tar -xzf lilium_clang-20250912.tar.gz -C clang
+
+      - name: Verify Extracted Files
+        run: |
+          echo "Daftar isi folder clang:"
+          ls -la clang
