@@ -35,6 +35,7 @@ jobs:
       - name: Clone Kernel Sources
         run: |
           git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ursinia source
+          rm -rf source/techpack/audio/asoc/codecs
           git clone --depth=1 https://github.com/liliumproject/kernel_qcom.git -b msm-4.19 source/techpack/audio/asoc/codecs
 
       - name: Compile Kernel
