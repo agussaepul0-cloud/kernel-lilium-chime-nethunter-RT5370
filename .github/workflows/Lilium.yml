@@ -2,12 +2,6 @@ name: Build Lilium Kernel - Xiaomi Chime
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch Kernel Source (Kosongkan untuk default)'
-        default: ''
-        required: false
-        type: string
 
 jobs:
   build:
@@ -28,11 +22,7 @@ jobs:
 
       - name: Clone Kernel Source Lilium Chime
         run: |
-          if [ -z "${{ inputs.branch }}" ]; then
-            git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel
-          else
-            git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ${{ inputs.branch }} kernel
-          fi
+          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ursinia kernel
 
       - name: Compile Kernel
         run: |
@@ -45,9 +35,8 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-          # Fix script compiler-version check jika GCC eksternal tidak dipasangkan
           mkdir -p out
-          make O=out chime_defconfig
+          make O=out vendor/bengal-perf_defconfig
           make O=out -j$(nproc)
 
       - name: Package with AnyKernel3
