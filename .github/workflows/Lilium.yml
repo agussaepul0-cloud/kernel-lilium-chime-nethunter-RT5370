@@ -1,7 +1,7 @@
 name: Custom Kernel Build - Redmi 9T
 
 on:
-  workflow_dispatch: # Bisa dijalankan manual dari tab Actions di GitHub
+  workflow_dispatch: # Jalankan manual dari tab Actions di GitHub
 
 jobs:
   build:
@@ -29,27 +29,26 @@ jobs:
             git wget curl python3 python2 zip unzip libarchive-tools \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Setup Toolchain (Clang / GCC)
+      - name: Setup Toolchain (Proton Clang - Public Repo)
         run: |
-          echo "Mengunduh AOSP Clang..."
-          git clone https://gitlab.com/LeRobotiqueur/aarch64-linux-android-clang.git --depth=1 clang || \
-          git clone https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b.git --depth=1 clang
+          echo "Mengunduh Proton Clang publik..."
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
 
-      - name: Patch Makefiles to Bypass Werror (Anti-Error Compiler Modern)
+      - name: Patch Makefiles to Bypass Werror
         run: |
-          echo "Memulai pembersihan -Werror dari source code kernel..."
+          echo "Membersihan -Werror dari source code kernel..."
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
-          echo "Pembersihan selesai! Warning compiler tidak akan menggagalkan build."
+          echo "Pembersihan selesai!"
 
       - name: Setup Environment Variables
         run: |
           echo "ARCH=arm64" >> $GITHUB_ENV
           echo "SUBARCH=arm64" >> $GITHUB_ENV
-          echo "PATH=$PWD/clang/bin:$PATH" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
       - name: Make Defconfig
         run: |
-          # Sesuaikan 'bengal_defconfig' dengan nama defconfig perangkatmu di arch/arm64/configs/
+          # Sesuaikan 'vendor/bengal-perf_defconfig' dengan defconfig di arch/arm64/configs/
           make O=out ARCH=arm64 vendor/bengal-perf_defconfig
 
       - name: Compile Kernel
@@ -57,7 +56,6 @@ jobs:
           make -j$(nproc) O=out \
             ARCH=arm64 \
             CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
