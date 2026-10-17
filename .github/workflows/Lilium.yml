@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch Kernel Source'
-        default: '14'
-        required: true
+        description: 'Branch Kernel Source (Kosongkan untuk branch default)'
+        default: ''
+        required: false
         type: string
 
 jobs:
@@ -28,7 +28,11 @@ jobs:
 
       - name: Clone Kernel Source Lilium Chime
         run: |
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ${{ inputs.branch }} kernel
+          if [ -z "${{ inputs.branch }}" ]; then
+            git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git kernel
+          else
+            git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ${{ inputs.branch }} kernel
+          fi
 
       - name: Compile Kernel
         run: |
@@ -52,6 +56,8 @@ jobs:
           # Cek lokasi file Image hasil build
           if [ -f kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
             cp kernel/out/arch/arm64/boot/Image.gz-dtb anykernel/
+          elif [ -f kernel/out/arch/arm64/boot/Image.gz ]; then
+            cp kernel/out/arch/arm64/boot/Image.gz anykernel/
           elif [ -f kernel/out/arch/arm64/boot/Image ]; then
             cp kernel/out/arch/arm64/boot/Image anykernel/
           else
