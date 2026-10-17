@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch Kernel Source (Kosongkan untuk branch default)'
+        description: 'Branch Kernel Source (Kosongkan untuk default)'
         default: ''
         required: false
         type: string
@@ -22,8 +22,12 @@ jobs:
           sudo apt-get update && sudo apt-get upgrade -y
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev zlib1g-dev python3 git wget curl zip unzip libncurses-dev
 
-      - name: Clone Clang Toolchain (Proton Clang)
+      - name: Clone AOSP Clang & GCC Toolchains
         run: |
+          mkdir -p toolchain
+          echo "Cloning AOSP Clang..."
+          git clone --depth=1 https://gitlab.com/arter97/arm64-gcc.git toolchain/gcc64
+          git clone --depth=1 https://gitlab.com/arter97/arm-gcc.git toolchain/gcc32
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain/clang
 
       - name: Clone Kernel Source Lilium Chime
@@ -39,21 +43,21 @@ jobs:
           cd kernel
           export ARCH=arm64
           export SUBARCH=arm64
-          export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
           
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=clang
+          export CROSS_COMPILE=aarch64-elf-
+          export CROSS_COMPILE_ARM32=arm-eabi-
 
           mkdir -p out
           make O=out chime_defconfig
-          make O=out CC=clang -j$(nproc)
+          make O=out -j$(nproc)
 
       - name: Package with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
           rm -rf anykernel/.git
 
-          # Cek lokasi file Image hasil build
           if [ -f kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
             cp kernel/out/arch/arm64/boot/Image.gz-dtb anykernel/
           elif [ -f kernel/out/arch/arm64/boot/Image.gz ]; then
