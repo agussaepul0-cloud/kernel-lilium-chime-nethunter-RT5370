@@ -22,10 +22,9 @@ jobs:
           sudo apt-get update && sudo apt-get upgrade -y
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev zlib1g-dev python3 git wget curl zip unzip libncurses-dev
 
-      - name: Clone Clang Toolchain
+      - name: Clone Clang Toolchain (Proton Clang)
         run: |
-          mkdir -p toolchain/clang
-          git clone --depth=1 https://gitlab.com/ThankYouMario/android_prebuilts_clang_host_linux-x86_clang-r416183b.git toolchain/clang
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain/clang
 
       - name: Clone Kernel Source Lilium Chime
         run: |
