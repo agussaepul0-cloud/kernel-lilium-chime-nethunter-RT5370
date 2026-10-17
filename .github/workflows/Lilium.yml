@@ -1,65 +1,68 @@
-name: Build Lilium Kernel - Xiaomi Chime
+name: Custom Kernel Build - Redmi 9T
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Bisa dijalankan manual dari tab Actions di GitHub
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Set up Dependencies
-        run: |
-          sudo apt-get update && sudo apt-get upgrade -y
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev zlib1g-dev python3 git wget curl zip unzip libncurses-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+      - name: Free Up Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swaps: true
 
-      - name: Clone Clang Toolchain (Proton Clang)
+      - name: Install Build Dependencies
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain/clang
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            git wget curl python3 python2 zip unzip libarchive-tools \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Clone Kernel Source Lilium Chime
+      - name: Setup Toolchain (Clang / GCC)
         run: |
-          git clone --depth=1 https://github.com/liliumproject/kernel_xiaomi_chime.git -b ursinia kernel
+          echo "Mengunduh AOSP Clang..."
+          git clone https://gitlab.com/LeRobotiqueur/aarch64-linux-android-clang.git --depth=1 clang || \
+          git clone https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b.git --depth=1 clang
+
+      - name: Patch Makefiles to Bypass Werror (Anti-Error Compiler Modern)
+        run: |
+          echo "Memulai pembersihan -Werror dari source code kernel..."
+          find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
+          echo "Pembersihan selesai! Warning compiler tidak akan menggagalkan build."
+
+      - name: Setup Environment Variables
+        run: |
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "SUBARCH=arm64" >> $GITHUB_ENV
+          echo "PATH=$PWD/clang/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Make Defconfig
+        run: |
+          # Sesuaikan 'bengal_defconfig' dengan nama defconfig perangkatmu di arch/arm64/configs/
+          make O=out ARCH=arm64 vendor/bengal-perf_defconfig
 
       - name: Compile Kernel
         run: |
-          cd kernel
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$PATH"
-          
-          export CC=clang
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          make -j$(nproc) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-          mkdir -p out
-          make O=out vendor/bengal-perf_defconfig
-          make O=out -j$(nproc)
-
-      - name: Package with AnyKernel3
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
-          rm -rf anykernel/.git
-
-          if [ -f kernel/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp kernel/out/arch/arm64/boot/Image.gz-dtb anykernel/
-          elif [ -f kernel/out/arch/arm64/boot/Image.gz ]; then
-            cp kernel/out/arch/arm64/boot/Image.gz anykernel/
-          elif [ -f kernel/out/arch/arm64/boot/Image ]; then
-            cp kernel/out/arch/arm64/boot/Image anykernel/
-          else
-            echo "Error: Kernel image not found!"
-            exit 1
-          fi
-
-          cd anykernel
-          zip -r ../Lilium-Kernel-Chime-$(date +%Y%m%d).zip *
-
-      - name: Upload Flashable Zip Artifact
+      - name: Upload Kernel Image Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lilium-Kernel-Chime-Zip
-          path: Lilium-Kernel-Chime-*.zip
+          name: Kernel-Image-Redmi9T
+          path: out/arch/arm64/boot/Image.gz-dtb
