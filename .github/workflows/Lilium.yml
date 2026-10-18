@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -41,7 +41,6 @@ jobs:
           rm -rf out
 
           echo "--> Generating defconfig..."
-          # Menggunakan defconfig vendor bengal/citrus
           if [ -f "arch/arm64/configs/vendor/bengal-perf_defconfig" ]; then
               make O=out vendor/bengal-perf_defconfig
           elif [ -f "arch/arm64/configs/vendor/citrus_defconfig" ]; then
@@ -55,7 +54,6 @@ jobs:
 
       - name: Package AnyKernel3 for Redmi 9T
         run: |
-          # Verifikasi file hasil compile
           if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
               cp out/arch/arm64/boot/Image.gz-dtb AnyKernel/
           elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
@@ -64,7 +62,6 @@ jobs:
 
           cd AnyKernel
           
-          # Konfigurasi AnyKernel3 agar mendukung Redmi 9T (lime) & Poco M3 (citrus)
           sed -i 's/device.name1=.*/device.name1=lime/g' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=citrus/g' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=chime/g' anykernel.sh
@@ -73,7 +70,7 @@ jobs:
           zip -r9 Stormbreaker-Kernel-Lime-$(date +%Y%m%d).zip * -x .git README.md
 
       - name: Upload Kernel Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Stormbreaker-Kernel-Redmi9T
           path: AnyKernel/Stormbreaker-Kernel-Lime-*.zip
