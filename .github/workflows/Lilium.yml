@@ -18,8 +18,8 @@ jobs:
 
       - name: Clone Toolchain & AnyKernel3
         run: |
-          # Download Proton Clang Toolchain
-          git clone https://gitlab.com/kdrag0n/proton-clang.git --depth=1 clang
+          # Download Proton Clang Toolchain dari Mirror GitHub Publik
+          git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang
           
           # Download AnyKernel3
           git clone https://github.com/osm0sis/AnyKernel3.git -b master AnyKernel
