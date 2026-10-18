@@ -36,7 +36,7 @@ jobs:
 
       - name: Patch Makefiles to Bypass Werror
         run: |
-          echo "Membersihan -Werror dari source code kernel..."
+          echo "Membersihkan -Werror dari source code kernel..."
           find . -type f \( -name "Makefile*" -o -name "Kbuild*" \) -exec sed -i 's/-Werror//g' {} +
           echo "Pembersihan selesai!"
 
@@ -48,7 +48,6 @@ jobs:
 
       - name: Make Defconfig
         run: |
-          # Sesuaikan 'vendor/bengal-perf_defconfig' dengan defconfig di arch/arm64/configs/
           make O=out ARCH=arm64 vendor/bengal-perf_defconfig
 
       - name: Compile Kernel
