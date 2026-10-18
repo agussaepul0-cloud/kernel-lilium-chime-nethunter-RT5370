@@ -18,7 +18,7 @@ jobs:
 
       - name: Clone Toolchain & AnyKernel3
         run: |
-          # Download Proton Clang Toolchain dari Mirror GitHub Publik
+          # Download Proton Clang Toolchain dari Mirror GitHub
           git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang
           
           # Download AnyKernel3
@@ -26,7 +26,6 @@ jobs:
 
       - name: Start Kernel Compilation
         run: |
-          # Set Environment variables
           export TC_DIR=$(pwd)/clang
           export PATH="$TC_DIR/bin:$PATH"
           export ARCH=arm64
@@ -37,7 +36,7 @@ jobs:
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
           echo "--> Cleaning directory..."
-          make mrproper
+          make mrproper || true
           rm -rf out
 
           echo "--> Generating defconfig..."
@@ -45,8 +44,10 @@ jobs:
               make O=out vendor/bengal-perf_defconfig
           elif [ -f "arch/arm64/configs/vendor/citrus_defconfig" ]; then
               make O=out vendor/citrus_defconfig
-          else
+          elif [ -f "arch/arm64/configs/citrus_defconfig" ]; then
               make O=out citrus_defconfig
+          else
+              make O=out bengal-perf_defconfig
           fi
 
           echo "--> Compiling kernel..."
