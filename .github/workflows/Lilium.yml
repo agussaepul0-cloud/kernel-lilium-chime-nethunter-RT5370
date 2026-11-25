@@ -153,16 +153,29 @@ jobs:
           rm -rf out
           mkdir -p out
 
-          # 5. Pilih defconfig otomatis
-          if [ -f arch/arm64/configs/chime_defconfig ]; then
+          # 5. Gunakan defconfig vendor/xiaomi/bengal_defconfig + gabungkan vendor/xiaomi/chime.config
+          if [ -f arch/arm64/configs/vendor/xiaomi/bengal_defconfig ]; then
+            DEFCONFIG="vendor/xiaomi/bengal_defconfig"
+            echo "Menggunakan defconfig: $DEFCONFIG"
+            make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
+
+            if [ -f arch/arm64/configs/vendor/xiaomi/chime.config ]; then
+              echo "Menggabungkan fragment: arch/arm64/configs/vendor/xiaomi/chime.config"
+              ARCH=arm64 scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/xiaomi/chime.config
+            fi
+          elif [ -f arch/arm64/configs/chime_defconfig ]; then
             DEFCONFIG="chime_defconfig"
+            echo "Menggunakan defconfig: $DEFCONFIG"
+            make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
           elif [ -f arch/arm64/configs/vendor/chime_defconfig ]; then
             DEFCONFIG="vendor/chime_defconfig"
+            echo "Menggunakan defconfig: $DEFCONFIG"
+            make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
           else
             DEFCONFIG="vendor/bengal-perf_defconfig"
+            echo "Menggunakan defconfig: $DEFCONFIG"
+            make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
           fi
-          echo "Menggunakan defconfig: $DEFCONFIG"
-          make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
 
           # 6. Konfigurasi Wireless NetHunter RT5370, HID, & TUN
           scripts/config --file out/.config --enable CONFIG_NET
