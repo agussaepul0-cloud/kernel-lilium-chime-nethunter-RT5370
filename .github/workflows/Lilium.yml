@@ -46,6 +46,11 @@ jobs:
             sed -i '/limit_swap_bios/d' drivers/md/dm-crypt.c
           fi
 
+          # Perbaikan implicit declaration module_assert_mutex di kernel/module.c
+          if grep -q "module_assert_mutex" kernel/module.c && ! grep -q "void module_assert_mutex" kernel/module.c; then
+            sed -i '0,/module_assert_mutex(/s//static inline void module_assert_mutex(void) {}\n\nmodule_assert_mutex(/' kernel/module.c
+          fi
+
           rm -rf out
           mkdir -p out
 
