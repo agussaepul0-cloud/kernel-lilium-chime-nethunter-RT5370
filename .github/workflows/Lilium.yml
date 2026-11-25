@@ -41,6 +41,11 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           )
 
+          # Perbaikan bug limit_swap_bios di drivers/md/dm-crypt.c
+          if grep -q "limit_swap_bios" drivers/md/dm-crypt.c; then
+            sed -i '/limit_swap_bios/d' drivers/md/dm-crypt.c
+          fi
+
           rm -rf out
           mkdir -p out
 
@@ -103,7 +108,7 @@ jobs:
           echo "=== Verifikasi Config NetHunter & RT5370 ==="
           grep -E "^CONFIG_(CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX|USB_F_HID|USB_CONFIGFS_F_HID|TUN)=" out/.config || true
 
-          # 5. Kompilasi Image & DTBS (tanpa target dtbo.img)
+          # 5. Kompilasi Image & DTBS
           make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs
 
       - name: Repack Installer AnyKernel3
