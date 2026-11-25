@@ -67,6 +67,42 @@ jobs:
               print(f"Inserted module_assert_mutex stub at top-level line {insert_at + 1}.")
           EOF
 
+          # Perbaikan implicit declaration switch_dev_unregister & undeclared accdet_data di wcd-mbhc-v2.c
+          python3 - << 'EOF'
+          from pathlib import Path
+          import re
+
+          path = Path("techpack/audio/asoc/codecs/wcd-mbhc-v2.c")
+          if path.exists():
+              content = path.read_text(encoding="utf-8", errors="ignore")
+              original = content
+
+              if "accdet_data" in content and not re.search(r"\b(struct\s+\w+\s+)?accdet_data\s*[;=]", content):
+                  stub_var = "\nstatic int accdet_data;\n"
+                  lines = content.splitlines(keepends=True)
+                  insert_at = 0
+                  for i, line in enumerate(lines):
+                      if line.startswith("#include"):
+                          insert_at = i + 1
+                  lines.insert(insert_at, stub_var)
+                  content = "".join(lines)
+
+              if "switch_dev_unregister" in content:
+                  lines = content.splitlines(keepends=True)
+                  new_lines = []
+                  for line in lines:
+                      if "switch_dev_unregister" in line and not line.strip().startswith("//"):
+                          indent = line[:len(line) - len(line.lstrip())]
+                          new_lines.append(f"{indent}/* patched: {line.strip()} */\n")
+                      else:
+                          new_lines.append(line)
+                  content = "".join(new_lines)
+
+              if content != original:
+                  path.write_text(content, encoding="utf-8")
+                  print("Patched switch_dev_unregister / accdet_data in wcd-mbhc-v2.c.")
+          EOF
+
           rm -rf out
           mkdir -p out
 
@@ -185,6 +221,12 @@ jobs:
           . tools/ak3-core.sh;
 
           dump_boot;
+
+          # Aktifkan Double Tap to Wake saat proses flashing/boot
+          if [ -e /sys/touchpanel/double_tap ]; then
+            echo 1 > /sys/touchpanel/double_tap
+          fi
+
           write_boot;
           EOF
 
