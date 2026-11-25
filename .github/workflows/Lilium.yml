@@ -103,6 +103,69 @@ jobs:
                   print("Patched switch_dev_unregister / accdet_data in wcd-mbhc-v2.c.")
           EOF
 
+          # Perbaikan undefined symbol tracepoint msm_bus saat linking (MODPOST vmlinux.o)
+          python3 - << 'EOF'
+          from pathlib import Path
+
+          bus_dir = Path("drivers/soc/qcom/msm_bus")
+          trace_headers = [
+              "msm_bus_trace.h",
+              "msm_bus_dbg.h",
+          ]
+
+          found_header = None
+          for h in trace_headers:
+              if (bus_dir / h).exists():
+                  found_header = h
+                  break
+
+          if not found_header:
+              for p in bus_dir.glob("*trace*.h"):
+                  found_header = p.name
+                  break
+
+          targets = [
+              bus_dir / "msm_bus_fabric_adhoc.c",
+              bus_dir / "msm_bus_arb_adhoc.c",
+              bus_dir / "msm_bus_bimc_adhoc.c",
+          ]
+
+          for target in targets:
+              if not target.exists():
+                  continue
+              text = target.read_text(encoding="utf-8", errors="ignore")
+              changed = False
+
+              # Pastikan CREATE_TRACE_POINTS terdefinisi sebelum header tracepoint di-include
+              if found_header and found_header not in text:
+                  lines = text.splitlines(keepends=True)
+                  insert_idx = 0
+                  for idx, l in enumerate(lines):
+                      if l.startswith("#include"):
+                          insert_idx = idx + 1
+                  block = f"\n#ifndef CREATE_TRACE_POINTS\n#define CREATE_TRACE_POINTS\n#endif\n#include \"{found_header}\"\n"
+                  lines.insert(insert_idx, block)
+                  text = "".join(lines)
+                  changed = True
+
+              # Fallback jika tracepoint tetap belum terdefinisi: sediakan stub simbol tracepoint
+              missing_syms = [
+                  ("__tracepoint_bus_agg_bw", "bus_agg_bw"),
+                  ("__tracepoint_bus_update_request_end", "bus_update_request_end"),
+                  ("__tracepoint_bus_bimc_config_limiter", "bus_bimc_config_limiter"),
+                  ("__tracepoint_bus_bimc_params", "bus_bimc_params"),
+              ]
+              for sym, base in missing_syms:
+                  if f"trace_{base}(" in text or base in text:
+                      if f"__tracepoint_{base}" not in text and not found_header:
+                          text += f"\n#include <linux/tracepoint.h>\nDEFINE_TRACE({base});\n"
+                          changed = True
+
+              if changed:
+                  target.write_text(text, encoding="utf-8")
+                  print(f"Patched msm_bus tracepoint in {target}")
+          EOF
+
           rm -rf out
           mkdir -p out
 
@@ -221,11 +284,6 @@ jobs:
           . tools/ak3-core.sh;
 
           dump_boot;
-
-          # Aktifkan Double Tap to Wake saat proses flashing/boot
-          if [ -e /sys/touchpanel/double_tap ]; then
-            echo 1 > /sys/touchpanel/double_tap
-          fi
 
           write_boot;
           EOF
