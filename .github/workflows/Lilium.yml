@@ -46,10 +46,32 @@ jobs:
             sed -i '/limit_swap_bios/d' drivers/md/dm-crypt.c
           fi
 
-          # Perbaikan implicit declaration module_assert_mutex di kernel/module.c
-          if grep -q "module_assert_mutex" kernel/module.c && ! grep -q "void module_assert_mutex" kernel/module.c; then
-            sed -i '0,/module_assert_mutex(/s//static inline void module_assert_mutex(void) {}\n\nmodule_assert_mutex(/' kernel/module.c
-          fi
+          # Perbaikan implicit declaration module_assert_mutex di kernel/module.c (baris 645)
+          python3 - << 'EOF'
+          from pathlib import Path
+
+          path = Path("kernel/module.c")
+          lines = path.read_text(encoding="utf-8", errors="ignore").splitlines(keepends=True)
+
+          stub = "static inline void module_assert_mutex(void) {}\n"
+          target_idx = 644  # baris 645
+
+          if target_idx < len(lines) and "module_assert_mutex" in lines[target_idx]:
+              prev_context = "".join(lines[max(0, target_idx - 10):target_idx])
+              if "void module_assert_mutex" not in prev_context:
+                  lines.insert(target_idx, stub)
+                  path.write_text("".join(lines), encoding="utf-8")
+                  print("Inserted module_assert_mutex stub before line 645.")
+          else:
+              for i, line in enumerate(lines):
+                  if "module_assert_mutex();" in line:
+                      prev_context = "".join(lines[max(0, i - 10):i])
+                      if "void module_assert_mutex" not in prev_context:
+                          lines.insert(i, stub)
+                          path.write_text("".join(lines), encoding="utf-8")
+                          print(f"Inserted module_assert_mutex stub before line {i + 1}.")
+                      break
+          EOF
 
           rm -rf out
           mkdir -p out
