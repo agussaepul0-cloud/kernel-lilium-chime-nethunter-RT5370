@@ -108,66 +108,14 @@ jobs:
           from pathlib import Path
 
           bus_dir = Path("drivers/soc/qcom/msm_bus")
-          trace_headers = [
-              "msm_bus_trace.h",
-              "msm_bus_dbg.h",
-          ]
+          bimc_file = bus_dir / "msm_bus_bimc_adhoc.c"
 
-          found_header = None
-          for h in trace_headers:
-              if (bus_dir / h).exists():
-                  found_header = h
-                  break
-
-          if not found_header:
-              for p in bus_dir.glob("*trace*.h"):
-                  found_header = p.name
-                  break
-
-          targets = [
-              bus_dir / "msm_bus_fabric_adhoc.c",
-              bus_dir / "msm_bus_arb_adhoc.c",
-              bus_dir / "msm_bus_bimc_adhoc.c",
-          ]
-
-          for target in targets:
-              if not target.exists():
-                  continue
-              text = target.read_text(encoding="utf-8", errors="ignore")
-              changed = False
-
-              if found_header and found_header not in text:
-                  lines = text.splitlines(keepends=True)
-                  insert_idx = 0
-                  for idx, l in enumerate(lines):
-                      if l.startswith("#include"):
-                          insert_idx = idx + 1
-                  block = f"\n#ifndef CREATE_TRACE_POINTS\n#define CREATE_TRACE_POINTS\n#endif\n#include \"{found_header}\"\n"
-                  lines.insert(insert_idx, block)
-                  text = "".join(lines)
-                  changed = True
-
-              if target.name == "msm_bus_bimc_adhoc.c" and "__tracepoint_bus_bimc_params" not in text:
-                  stub = """
-#include <linux/tracepoint.h>
-#ifndef __TP_DEFINED_bus_bimc_params
-#define __TP_DEFINED_bus_bimc_params
-struct tracepoint __tracepoint_bus_bimc_params __used __section("__tracepoints") = {
-	.name = "bus_bimc_params",
-	.key = STATIC_KEY_INIT_FALSE,
-	.regfunc = NULL,
-	.unregfunc = NULL,
-	.funcs = NULL,
-	.data = NULL,
-};
-#endif
-"""
-                  text = text + stub
-                  changed = True
-
-              if changed:
-                  target.write_text(text, encoding="utf-8")
-                  print(f"Patched msm_bus tracepoint in {target}")
+          if bimc_file.exists():
+              text = bimc_file.read_text(encoding="utf-8", errors="ignore")
+              if "__tracepoint_bus_bimc_params" not in text and "DEFINE_TRACE(bus_bimc_params)" not in text:
+                  text += "\n#include <linux/tracepoint.h>\nDEFINE_TRACE(bus_bimc_params);\n"
+                  bimc_file.write_text(text, encoding="utf-8")
+                  print("Added DEFINE_TRACE(bus_bimc_params) to msm_bus_bimc_adhoc.c")
           EOF
 
           rm -rf out
