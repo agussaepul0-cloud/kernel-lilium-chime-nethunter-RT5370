@@ -136,7 +136,6 @@ jobs:
               text = target.read_text(encoding="utf-8", errors="ignore")
               changed = False
 
-              # Pastikan CREATE_TRACE_POINTS terdefinisi sebelum header tracepoint di-include
               if found_header and found_header not in text:
                   lines = text.splitlines(keepends=True)
                   insert_idx = 0
@@ -148,18 +147,23 @@ jobs:
                   text = "".join(lines)
                   changed = True
 
-              # Fallback jika tracepoint tetap belum terdefinisi: sediakan stub simbol tracepoint
-              missing_syms = [
-                  ("__tracepoint_bus_agg_bw", "bus_agg_bw"),
-                  ("__tracepoint_bus_update_request_end", "bus_update_request_end"),
-                  ("__tracepoint_bus_bimc_config_limiter", "bus_bimc_config_limiter"),
-                  ("__tracepoint_bus_bimc_params", "bus_bimc_params"),
-              ]
-              for sym, base in missing_syms:
-                  if f"trace_{base}(" in text or base in text:
-                      if f"__tracepoint_{base}" not in text and not found_header:
-                          text += f"\n#include <linux/tracepoint.h>\nDEFINE_TRACE({base});\n"
-                          changed = True
+              if target.name == "msm_bus_bimc_adhoc.c" and "__tracepoint_bus_bimc_params" not in text:
+                  stub = """
+#include <linux/tracepoint.h>
+#ifndef __TP_DEFINED_bus_bimc_params
+#define __TP_DEFINED_bus_bimc_params
+struct tracepoint __tracepoint_bus_bimc_params __used __section("__tracepoints") = {
+	.name = "bus_bimc_params",
+	.key = STATIC_KEY_INIT_FALSE,
+	.regfunc = NULL,
+	.unregfunc = NULL,
+	.funcs = NULL,
+	.data = NULL,
+};
+#endif
+"""
+                  text = text + stub
+                  changed = True
 
               if changed:
                   target.write_text(text, encoding="utf-8")
