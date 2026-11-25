@@ -46,7 +46,7 @@ jobs:
             sed -i '/limit_swap_bios/d' drivers/md/dm-crypt.c
           fi
 
-          # 2. Perbaikan implicit declaration module_assert_mutex di luar fungsi (file scope)
+          # 2. Perbaikan implicit declaration module_assert_mutex di kernel/module.c
           python3 - << 'EOF'
           from pathlib import Path
 
@@ -103,7 +103,7 @@ jobs:
                   print("Patched switch_dev_unregister / accdet_data in wcd-mbhc-v2.c.")
           EOF
 
-          # 4. Perbaikan lengkap undefined symbol tracepoint msm_bus (1-to-1 per file agar bebas duplicate symbol)
+          # 4. Perbaikan undefined symbol tracepoint msm_bus
           python3 - << 'EOF'
           from pathlib import Path
 
@@ -177,52 +177,94 @@ jobs:
             make O=out "${MAKE_ARGS[@]}" "$DEFCONFIG"
           fi
 
-          # 6. Konfigurasi Wireless NetHunter RT5370, HID, & TUN
-          scripts/config --file out/.config --enable CONFIG_NET
-          scripts/config --file out/.config --enable CONFIG_WIRELESS
-          scripts/config --file out/.config --enable CONFIG_WLAN
-          scripts/config --file out/.config --enable CONFIG_NET_RADIO
-          scripts/config --file out/.config --enable CONFIG_CFG80211
-          scripts/config --file out/.config --enable CONFIG_MAC80211
-          scripts/config --file out/.config --enable CONFIG_MAC80211_LEDS
-          scripts/config --file out/.config --enable CONFIG_MAC80211_MESH
-          scripts/config --file out/.config --enable CONFIG_PACKET
-          scripts/config --file out/.config --enable CONFIG_NL80211_TESTMODE
-          scripts/config --file out/.config --enable CONFIG_CFG80211_INTERNAL_REGDB
-          scripts/config --file out/.config --disable CONFIG_CFG80211_REQUIRE_SIGNED_REGDB
+          # 6. Konfigurasi Wireless NetHunter, NAT (iptables/nftables), RT5370, HID, & TUN
+          AIRGEDDON_OPTS=(
+            CONFIG_NET
+            CONFIG_INET
+            CONFIG_IP_ADVANCED_ROUTER
+            CONFIG_IP_MULTIPLE_TABLES
+            CONFIG_PACKET
+            CONFIG_BRIDGE
+            CONFIG_BRIDGE_NETFILTER
+            CONFIG_WIRELESS
+            CONFIG_WLAN
+            CONFIG_NET_RADIO
+            CONFIG_CFG80211
+            CONFIG_MAC80211
+            CONFIG_MAC80211_LEDS
+            CONFIG_MAC80211_MESH
+            CONFIG_NL80211_TESTMODE
+            CONFIG_CFG80211_INTERNAL_REGDB
+            CONFIG_NETFILTER
+            CONFIG_NETFILTER_ADVANCED
+            CONFIG_NETFILTER_NETLINK
+            CONFIG_NETFILTER_NETLINK_QUEUE
+            CONFIG_NETFILTER_NETLINK_LOG
+            CONFIG_NF_CONNTRACK
+            CONFIG_NF_CONNTRACK_MARK
+            CONFIG_NF_CONNTRACK_PROCFS
+            CONFIG_NF_CONNTRACK_EVENTS
+            CONFIG_NF_NAT
+            CONFIG_NF_NAT_IPV4
+            CONFIG_NF_NAT_MASQUERADE_IPV4
+            CONFIG_NF_TABLES
+            CONFIG_NF_TABLES_NETDEV
+            CONFIG_NF_TABLES_IPV4
+            CONFIG_NFT_NAT
+            CONFIG_NFT_MASQ
+            CONFIG_NFT_REDIR
+            CONFIG_NETFILTER_XTABLES
+            CONFIG_NETFILTER_XT_NAT
+            CONFIG_NETFILTER_XT_TARGET_MASQUERADE
+            CONFIG_NETFILTER_XT_TARGET_REDIRECT
+            CONFIG_NETFILTER_XT_TARGET_TCPMSS
+            CONFIG_NETFILTER_XT_MATCH_STATE
+            CONFIG_NETFILTER_XT_MATCH_CONNTRACK
+            CONFIG_NETFILTER_XT_MATCH_IPVS
+            CONFIG_NETFILTER_XT_MATCH_MULTIPORT
+            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
+            CONFIG_IP_NF_IPTABLES
+            CONFIG_IP_NF_FILTER
+            CONFIG_IP_NF_TARGET_REJECT
+            CONFIG_IP_NF_NAT
+            CONFIG_IP_NF_TARGET_MASQUERADE
+            CONFIG_IP_NF_TARGET_REDIRECT
+            CONFIG_IP_NF_MANGLE
+            CONFIG_IP6_NF_IPTABLES
+            CONFIG_IP6_NF_NAT
+            CONFIG_IP6_NF_TARGET_MASQUERADE
+            CONFIG_IP6_NF_TARGET_REDIRECT
+            CONFIG_FW_LOADER
+            CONFIG_USB_OTG
+            CONFIG_USB_MON
+            CONFIG_TUN
+            CONFIG_USB_CONFIGFS_F_HID
+            CONFIG_USB_F_HID
+            CONFIG_USB_SUPPORT
+            CONFIG_USB
+            CONFIG_USB_NET_DRIVERS
+            CONFIG_RT2X00
+            CONFIG_RT2800USB
+            CONFIG_RT2800USB_RT33XX
+            CONFIG_RT2800USB_RT35XX
+            CONFIG_RT2800USB_RT53XX
+            CONFIG_RT2X00_LIB_USB
+            CONFIG_RT2X00_LIB_FIRMWARE
+            CONFIG_RT2X00_LIB_CRYPTO
+            CONFIG_TOUCHSCREEN_DOUBLE_TAP
+          )
 
-          # USB OTG & Firmware Loading Support
-          scripts/config --file out/.config --enable CONFIG_FW_LOADER
-          scripts/config --file out/.config --enable CONFIG_USB_OTG
-          scripts/config --file out/.config --enable CONFIG_USB_MON
+          for opt in "${AIRGEDDON_OPTS[@]}"; do
+            scripts/config --file out/.config --enable "$opt" || true
+          done
+          scripts/config --file out/.config --disable CONFIG_CFG80211_REQUIRE_SIGNED_REGDB || true
 
-          # HID & Tunneling Support
-          scripts/config --file out/.config --enable CONFIG_TUN
-          scripts/config --file out/.config --enable CONFIG_USB_CONFIGFS_F_HID
-          scripts/config --file out/.config --enable CONFIG_USB_F_HID
-
-          # Driver RT5370 (Ralink rt2800usb)
-          scripts/config --file out/.config --enable CONFIG_USB_SUPPORT
-          scripts/config --file out/.config --enable CONFIG_USB
-          scripts/config --file out/.config --enable CONFIG_USB_NET_DRIVERS
-          scripts/config --file out/.config --enable CONFIG_RT2X00
-          scripts/config --file out/.config --enable CONFIG_RT2800USB
-          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT33XX
-          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT35XX
-          scripts/config --file out/.config --enable CONFIG_RT2800USB_RT53XX
-          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_USB
-          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_FIRMWARE
-          scripts/config --file out/.config --enable CONFIG_RT2X00_LIB_CRYPTO
-
-          # 7. Aktifkan DT2W Default (jika opsi tersedia di Kconfig)
-          scripts/config --file out/.config --enable CONFIG_TOUCHSCREEN_DOUBLE_TAP || true
-
-          # 8. Regenerasi Kconfig Dependensi & Verifikasi Simbol
+          # 7. Regenerasi Kconfig Dependensi & Verifikasi Simbol
           make O=out "${MAKE_ARGS[@]}" olddefconfig
-          echo "=== Verifikasi Config NetHunter & RT5370 ==="
-          grep -E "^CONFIG_(CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX|USB_F_HID|USB_CONFIGFS_F_HID|TUN)[=m]" out/.config || true
+          echo "=== Verifikasi Config NetHunter, NAT & RT5370 ==="
+          grep -E "^CONFIG_(CFG80211|MAC80211|NF_NAT|IP_NF_NAT|NFT_NAT|NFT_MASQ|NFT_REDIR|NETFILTER_XT_TARGET_MASQUERADE|NETFILTER_XT_TARGET_REDIRECT|RT2X00|RT2800USB|RT2800USB_RT53XX|USB_F_HID|USB_CONFIGFS_F_HID|TUN)[=m]" out/.config || true
 
-          # 9. Kompilasi Image & DTBS
+          # 8. Kompilasi Image & DTBS
           make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs
 
       - name: Repack Installer AnyKernel3
@@ -249,25 +291,16 @@ jobs:
             echo "Error: DTB files not found!" && exit 1
           fi
 
-          # Salin modul kernel (.ko) jika ada
-          mkdir -p AnyKernel3/modules/system/lib/modules
-          find kernel/out/ -name "*.ko" -exec cp -f {} AnyKernel3/modules/system/lib/modules/ \;
-          if [ -z "$(ls -A AnyKernel3/modules/system/lib/modules/ 2>/dev/null)" ]; then
-            DO_MODULES=0
-          else
-            DO_MODULES=1
-          fi
-
           cd AnyKernel3
 
-          cat << EOF > anykernel.sh
+          cat << 'EOF' > anykernel.sh
           ### AnyKernel3 Ramdisk Mod Script
           ## osm0sis @ xda-developers
 
           properties() { '
           kernel.string=Lilium NetHunter Chime RT5370
           do.devicecheck=0
-          do.modules=$DO_MODULES
+          do.modules=0
           do.systemless=1
           do.cleanup=1
           do.cleanuponabort=0
