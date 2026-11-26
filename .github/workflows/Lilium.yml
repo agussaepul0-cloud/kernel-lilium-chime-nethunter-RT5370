@@ -298,19 +298,23 @@ jobs:
             CONFIG_BLK_WBT_MQ
             CONFIG_ZRAM
             CONFIG_ZRAM_DEF_COMP_LZ4
-            CONFIG_ZRAM_WRITEBACK
             CONFIG_CRYPTO_LZ4
             CONFIG_CRYPTO_LZ4HC
             CONFIG_CRYPTO_ZSTD
             CONFIG_CRYPTO_LZO
-            CONFIG_CLEANCACHE
-            CONFIG_FRONTSWAP
             CONFIG_CPU_FREQ_GOV_ONDEMAND
             CONFIG_CPU_FREQ_GOV_CONSERVATIVE
           )
 
           for opt in "${EXTRA_OPTS[@]}"; do
             scripts/config --file out/.config --enable "$opt" || true
+          done
+
+          for dis in \
+            CONFIG_ZRAM_WRITEBACK \
+            CONFIG_CLEANCACHE \
+            CONFIG_FRONTSWAP; do
+            scripts/config --file out/.config --disable "$dis" || true
           done
 
           # 8. Patch Batas Suhu Max 50°C (50000 mC) di Device Tree Thermal (DTSI)
