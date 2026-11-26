@@ -16,7 +16,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev git ccache zip gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3
 
       - name: Clone Kernel Source & Toolchain
         run: |
@@ -259,12 +259,96 @@ jobs:
           done
           scripts/config --file out/.config --disable CONFIG_CFG80211_REQUIRE_SIGNED_REGDB || true
 
-          # 7. Regenerasi Kconfig Dependensi & Verifikasi Simbol
+          # 7. Opsi Tambahan: TCP Congestion, Packet Schedulers, I/O Schedulers, ZRAM & Governor
+          EXTRA_OPTS=(
+            CONFIG_TCP_CONG_BIC
+            CONFIG_TCP_CONG_CUBIC
+            CONFIG_TCP_CONG_WESTWOOD
+            CONFIG_TCP_CONG_HTCP
+            CONFIG_TCP_CONG_BBR
+            CONFIG_TCP_CONG_VENO
+            CONFIG_TCP_CONG_ILLINOIS
+            CONFIG_TCP_CONG_YEAH
+            CONFIG_TCP_CONG_HYBLA
+            CONFIG_TCP_CONG_VEGAS
+            CONFIG_TCP_CONG_SCALABLE
+            CONFIG_TCP_CONG_DCTCP
+            CONFIG_TCP_CONG_CDG
+            CONFIG_TCP_CONG_LP
+            CONFIG_TCP_CONG_NV
+            CONFIG_TCP_CONG_HIGHSPEED
+            CONFIG_NET_SCH_FQ
+            CONFIG_NET_SCH_CAKE
+            CONFIG_NET_SCH_PIE
+            CONFIG_NET_SCH_SFQ
+            CONFIG_NET_SCH_PRIO
+            CONFIG_NET_SCH_CODEL
+            CONFIG_NET_SCH_HTB
+            CONFIG_NET_SCH_TBF
+            CONFIG_IOSCHED_DEADLINE
+            CONFIG_IOSCHED_NOOP
+            CONFIG_IOSCHED_CFQ
+            CONFIG_CFQ_GROUP_IOSCHED
+            CONFIG_MQ_IOSCHED_DEADLINE
+            CONFIG_MQ_IOSCHED_KYBER
+            CONFIG_MQ_IOSCHED_BFQ
+            CONFIG_BLK_DEV_THROTTLING
+            CONFIG_BLK_WBT
+            CONFIG_BLK_WBT_SQ
+            CONFIG_BLK_WBT_MQ
+            CONFIG_ZRAM
+            CONFIG_ZRAM_DEF_COMP_LZ4
+            CONFIG_ZRAM_WRITEBACK
+            CONFIG_CRYPTO_LZ4
+            CONFIG_CRYPTO_LZ4HC
+            CONFIG_CRYPTO_ZSTD
+            CONFIG_CRYPTO_LZO
+            CONFIG_CLEANCACHE
+            CONFIG_FRONTSWAP
+            CONFIG_CPU_FREQ_GOV_ONDEMAND
+            CONFIG_CPU_FREQ_GOV_CONSERVATIVE
+          )
+
+          for opt in "${EXTRA_OPTS[@]}"; do
+            scripts/config --file out/.config --enable "$opt" || true
+          done
+
+          # 8. Patch Batas Suhu Max 50°C (50000 mC) di Device Tree Thermal (DTSI)
+          python3 - << 'EOF'
+          from pathlib import Path
+          import re
+
+          dts_dir = Path("arch/arm64/boot/dts/vendor/qcom")
+          if dts_dir.exists():
+              for dtsi in sorted(dts_dir.rglob("*.dtsi")):
+                  if "thermal" not in dtsi.name and "bengal" not in dtsi.name and "chime" not in dtsi.name:
+                      continue
+                  text = dtsi.read_text(encoding="utf-8", errors="ignore")
+                  if "thermal-zones" not in text and "trips" not in text:
+                      continue
+
+                  def cap_to_50c(match):
+                      prefix, val_str, suffix = match.group(1), match.group(2), match.group(3)
+                      val = int(val_str)
+                      if val >= 1000 and val < 50000:
+                          return f"{prefix}50000{suffix}"
+                      return match.group(0)
+
+                  updated = re.sub(r"(temperature\s*=\s*<)\s*(\d+)\s*(>;)", cap_to_50c, text)
+                  if updated != text:
+                      dtsi.write_text(updated, encoding="utf-8")
+                      print(f"Patched thermal thresholds to 50000 (50°C) in: {dtsi}")
+          EOF
+
+          # 9. Regenerasi Kconfig Dependensi & Verifikasi Simbol
           make O=out "${MAKE_ARGS[@]}" olddefconfig
           echo "=== Verifikasi Config NetHunter, NAT & RT5370 ==="
           grep -E "^CONFIG_(CFG80211|MAC80211|NF_NAT|IP_NF_NAT|NFT_NAT|NFT_MASQ|NFT_REDIR|NETFILTER_XT_TARGET_MASQUERADE|NETFILTER_XT_TARGET_REDIRECT|RT2X00|RT2800USB|RT2800USB_RT53XX|USB_F_HID|USB_CONFIGFS_F_HID|TUN)[=m]" out/.config || true
 
-          # 8. Kompilasi Image & DTBS
+          echo "=== Verifikasi Opsi Tambahan (TCP, Qdisc, I/O, ZRAM, Governor) ==="
+          grep -E "^CONFIG_(TCP_CONG_|NET_SCH_|IOSCHED_|MQ_IOSCHED_|BLK_WBT|ZRAM|CPU_FREQ_GOV_)" out/.config | sort -u || true
+
+          # 10. Kompilasi Image & DTBS
           make -j$(nproc --all) O=out "${MAKE_ARGS[@]}" Image dtbs
 
       - name: Repack Installer AnyKernel3
